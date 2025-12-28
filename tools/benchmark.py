@@ -3,19 +3,24 @@
 Benchmark script for evaluating memory peak and latency of different view transform methods.
 
 Usage:
-    # Kernel-only mode (no mmdet3d required):
-    python benchmark.py --kernel-only --num-height-bins 8,10,16,20,40
+    # Using default config (tools/config/config.yaml):
+    python benchmark.py
     
-    # Full system mode (requires mmdet3d):
-    python benchmark.py --load-calib calib.json
+    # Override config from command line:
+    python benchmark.py num_height_bins=[8,10,16,20,40] kernel_only=true
+    
+    # Use a different config file:
+    python benchmark.py --config-path=config --config-name=my_config
+    
+    # Edit config.yaml to customize settings
 """
 
-import argparse
 import csv
 import json
 from typing import Dict, List
 
-import torch
+import hydra
+from omegaconf import DictConfig, OmegaConf
 
 from utils.benchmark_utils import (
     benchmark_flashbevpool_kernel,
@@ -35,78 +40,36 @@ from utils.plotting import (
 )
 from utils.transformer_utils import create_view_transformer
 
-try:
-    from tabulate import tabulate
-    HAS_TABULATE = True
-except ImportError:
-    HAS_TABULATE = False
+from tabulate import tabulate
 
 
-def parse_arguments():
-    """Parse command line arguments."""
-    parser = argparse.ArgumentParser(description="Benchmark view transform methods")
-    parser.add_argument("--batch-size", type=int, default=1, help="Batch size (default: 1)")
-    parser.add_argument("--num-cameras", type=int, default=6, help="Number of cameras (default: 6)")
-    parser.add_argument("--feature-h", type=int, default=16)
-    parser.add_argument("--feature-w", type=int, default=44)
-    parser.add_argument("--in-channels", type=int, default=256)
-    parser.add_argument("--out-channels", type=int, default=64)
-    parser.add_argument("--input-h", type=int, default=256)
-    parser.add_argument("--input-w", type=int, default=704)
-    parser.add_argument("--downsample", type=int, default=16)
-    parser.add_argument("--num-warmup", type=int, default=10)
-    parser.add_argument("--num-iterations", type=int, default=100)
-    parser.add_argument("--device", type=str, default="cuda")
-    parser.add_argument("--output-csv", type=str, default=None)
-    parser.add_argument("--output-json", type=str, default=None)
-    parser.add_argument("--grid-config", type=str, default=None)
-    parser.add_argument("--load-calib", type=str, default=None,
-                        help="Path to calibration JSON file (optional for kernel-only mode)")
-    parser.add_argument("--num-height-bins", type=str, default=None,
-                        help="Comma-separated list of num_height_bins to test (e.g., '8,10,16,20,40')")
-    parser.add_argument("--num-cameras-list", type=str, default=None,
-                        help="Comma-separated list of num_cameras to test (e.g., '1,2,3,4,5,6')")
-    parser.add_argument("--plot-output", type=str, default=None,
-                        help="Output path for plot (auto-determined if not specified)")
-    parser.add_argument("--depth-distribution", type=str, default="laplace",
-                        choices=["laplace", "gaussian"],
-                        help="Depth distribution type: 'laplace' or 'gaussian' (default: laplace)")
-    parser.add_argument("--depth-weight-threshold", type=float, default=0.0,
-                        help="Threshold for depth weight filtering")
-    parser.add_argument("--depth-weight-threshold-list", type=str, default=None,
-                        help="Comma-separated list of depth_weight_threshold values to test")
-    parser.add_argument("--kernel-only", action="store_true",
-                        help="Benchmark FlashBEVPool kernel only (no mmdet3d dependency).")
-    return parser.parse_args()
-
-
-def determine_experiment_type(args):
+def determine_experiment_type(cfg: DictConfig):
     """Determine experiment type and parse parameters."""
-    has_height_bins_exp = args.num_height_bins is not None
-    has_cameras_exp = args.num_cameras_list is not None
-    has_depth_threshold_exp = args.depth_weight_threshold_list is not None
+    has_height_bins_exp = cfg.num_height_bins is not None
+    has_cameras_exp = cfg.num_cameras_list is not None
+    has_depth_threshold_exp = cfg.depth_weight_threshold_list is not None
     
     if sum([has_height_bins_exp, has_cameras_exp, has_depth_threshold_exp]) > 1:
         raise ValueError("Cannot run multiple experiments simultaneously. "
-                       "Please specify only one: --num-height-bins OR --num-cameras-list OR --depth-weight-threshold-list")
+                       "Please specify only one: num_height_bins OR num_cameras_list OR depth_weight_threshold_list")
     
     if not has_height_bins_exp and not has_cameras_exp and not has_depth_threshold_exp:
         num_height_bins_list = [10]
         has_height_bins_exp = True
     elif has_height_bins_exp:
-        num_height_bins_list = [int(x.strip()) for x in args.num_height_bins.split(",")]
+        num_height_bins_list = cfg.num_height_bins if isinstance(cfg.num_height_bins, list) else [cfg.num_height_bins]
     else:
         num_height_bins_list = [10]
     
     if has_depth_threshold_exp:
-        depth_weight_threshold_list = [float(x.strip()) for x in args.depth_weight_threshold_list.split(",")]
+        depth_weight_threshold_list = cfg.depth_weight_threshold_list if isinstance(cfg.depth_weight_threshold_list, list) else [cfg.depth_weight_threshold_list]
     else:
-        depth_weight_threshold_list = [args.depth_weight_threshold]
+        depth_weight_threshold_list = [cfg.depth_weight_threshold]
     
     if has_cameras_exp:
-        num_cameras_list = [int(x.strip()) for x in args.num_cameras_list.split(",")]
+        num_cameras_list = cfg.num_cameras_list if isinstance(cfg.num_cameras_list, list) else [cfg.num_cameras_list]
     else:
-        num_cameras_list = [args.num_cameras]
+        num_cameras_list = [cfg.num_cameras]
     
     z_resolutions = [Z_RANGE / num_bins for num_bins in num_height_bins_list]
     
@@ -123,7 +86,7 @@ def determine_experiment_type(args):
 
 def run_single_benchmark(
     method_config: Dict,
-    args,
+    cfg: DictConfig,
     grid_config: Dict,
     grid_x: int,
     grid_y: int,
@@ -146,16 +109,16 @@ def run_single_benchmark(
     try:
         if is_flashbev and is_kernel_only:
             data = create_flashbevpool_data(
-                batch_size=args.batch_size,
+                batch_size=cfg.batch_size,
                 num_cameras=num_cams,
-                in_channels=args.in_channels,
-                feature_h=args.feature_h,
-                feature_w=args.feature_w,
+                in_channels=cfg.in_channels,
+                feature_h=cfg.feature_h,
+                feature_w=cfg.feature_w,
                 grid_x=grid_x,
                 grid_y=grid_y,
                 grid_z=num_bins,
                 roi_range=roi_range,
-                device=args.device,
+                device=cfg.device,
                 calib_params=calib_params,
             )
             
@@ -168,19 +131,19 @@ def run_single_benchmark(
                 use_vectorized_load=method_config.get("use_vectorized_load", False),
                 epsilon=1e-6,
                 depth_weight_threshold=depth_threshold,
-                num_warmup=args.num_warmup,
-                num_iterations=args.num_iterations,
-                device=args.device,
+                num_warmup=cfg.num_warmup,
+                num_iterations=cfg.num_iterations,
+                device=cfg.device,
             )
         else:
             if input_list is None:
                 input_list, _ = create_dummy_input(
-                    batch_size=args.batch_size,
+                    batch_size=cfg.batch_size,
                     num_cameras=num_cams,
-                    in_channels=args.in_channels,
-                    feature_h=args.feature_h,
-                    feature_w=args.feature_w,
-                    device=args.device,
+                    in_channels=cfg.in_channels,
+                    feature_h=cfg.feature_h,
+                    feature_w=cfg.feature_w,
+                    device=cfg.device,
                     calib_params=calib_params,
                 )
             
@@ -188,17 +151,17 @@ def run_single_benchmark(
                 grid_config=grid_config,
                 sample_grid_z=sample_grid_z or [Z_MIN, Z_MAX, z_res],
                 input_size=input_size,
-                in_channels=args.in_channels,
-                out_channels=args.out_channels,
-                downsample=args.downsample,
+                in_channels=cfg.in_channels,
+                out_channels=cfg.out_channels,
+                downsample=cfg.downsample,
                 fuse_projection=method_config["fuse_projection"],
                 use_bev_pool=method_config["use_bev_pool"],
                 use_shared_memory=method_config.get("use_shared_memory", False),
                 depth_regression=method_config["depth_regression"],
                 use_bilinear=method_config["use_bilinear"],
                 fuse_bilinear=method_config.get("fuse_bilinear"),
-                device=args.device,
-                depth_distribution=method_config.get("depth_distribution", args.depth_distribution),
+                device=cfg.device,
+                depth_distribution=method_config.get("depth_distribution", cfg.depth_distribution),
                 optimize_z_precompute=method_config.get("optimize_z_precompute", True),
                 use_warp_kernel=method_config.get("use_warp_kernel", False),
                 use_vectorized_load=method_config.get("use_vectorized_load", False),
@@ -208,9 +171,9 @@ def run_single_benchmark(
             stats = benchmark_method(
                 transformer=transformer,
                 input_list=input_list,
-                num_warmup=args.num_warmup,
-                num_iterations=args.num_iterations,
-                device=args.device,
+                num_warmup=cfg.num_warmup,
+                num_iterations=cfg.num_iterations,
+                device=cfg.device,
             )
         
         print(f"  ✓ Latency: {stats['latency_mean_ms']:.2f} ± {stats['latency_std_ms']:.2f} ms")
@@ -234,7 +197,7 @@ def run_single_benchmark(
 
 
 def run_experiment(
-    args,
+    cfg: DictConfig,
     exp_config: Dict,
     grid_config: Dict,
     methods: List[Dict],
@@ -249,7 +212,7 @@ def run_experiment(
         grid_config["y"][0], grid_config["y"][1],
         grid_config["z"][0], grid_config["z"][1],
     ]
-    input_size = (args.input_h, args.input_w)
+    input_size = (cfg.input_h, cfg.input_w)
     
     all_results = []
     memory_data = {method["name"]: {exp_config["x_axis_label"]: [], "memory_mb": [], "latency_ms": []} 
@@ -289,14 +252,14 @@ def run_experiment(
         sample_grid_z = [Z_MIN, Z_MAX, z_res]
         input_list = None
         
-        if not args.kernel_only and any(not (m["fuse_projection"] and not m.get("use_bev_pool", False)) for m in methods):
+        if not cfg.kernel_only and any(not (m["fuse_projection"] and not m.get("use_bev_pool", False)) for m in methods):
             input_list, _ = create_dummy_input(
-                batch_size=args.batch_size,
+                batch_size=cfg.batch_size,
                 num_cameras=num_cams,
-                in_channels=args.in_channels,
-                feature_h=args.feature_h,
-                feature_w=args.feature_w,
-                device=args.device,
+                in_channels=cfg.in_channels,
+                feature_h=cfg.feature_h,
+                feature_w=cfg.feature_w,
+                device=cfg.device,
                 calib_params=calib_params,
             )
         
@@ -305,10 +268,10 @@ def run_experiment(
             print(f"Benchmarking {method_name} ({value_key}={value})...")
             
             result = run_single_benchmark(
-                method_config, args, grid_config, grid_x, grid_y, roi_range,
+                method_config, cfg, grid_config, grid_x, grid_y, roi_range,
                 input_size, calib_params, num_bins, z_res, num_cams,
                 depth_threshold, depth_distribution_int, input_list, sample_grid_z,
-                args.kernel_only,
+                cfg.kernel_only,
             )
             
             if result:
@@ -350,48 +313,41 @@ def print_summary(all_results, exp_config, x_axis_values):
         headers = ["Method", "Latency (ms)", "P95 (ms)", "P99 (ms)", 
                   "Peak Mem Alloc (MB)", "Peak Mem Resv (MB)"]
         
-        if HAS_TABULATE:
-            print(tabulate(table_data, headers=headers, tablefmt="grid"))
-        else:
-            col_widths = [max(len(str(row[i])) for row in table_data + [headers]) for i in range(len(headers))]
-            print(" | ".join(h.ljust(w) for h, w in zip(headers, col_widths)))
-            print("-" * sum(col_widths) + "-" * (len(headers) - 1) * 3)
-            for row in table_data:
-                print(" | ".join(str(cell).ljust(w) for cell, w in zip(row, col_widths)))
+        print(tabulate(table_data, headers=headers, tablefmt="grid"))
     else:
         print(f"Tested {len(x_axis_values)} values: {x_axis_values}")
         print(f"Total results: {len(all_results)}")
     print()
 
 
-def save_results(all_results, args, grid_config, exp_config):
+def save_results(all_results, cfg: DictConfig, grid_config: Dict, exp_config: Dict):
     """Save results to CSV/JSON files."""
-    if args.output_csv:
-        print(f"Saving results to {args.output_csv}...")
-        with open(args.output_csv, "w", newline="") as f:
+    if cfg.output_csv:
+        print(f"Saving results to {cfg.output_csv}...")
+        with open(cfg.output_csv, "w", newline="") as f:
             if len(all_results) > 0:
                 writer = csv.DictWriter(f, fieldnames=all_results[0].keys())
                 writer.writeheader()
                 writer.writerows(all_results)
         print("  ✓ Saved CSV")
     
-    if args.output_json:
-        print(f"Saving results to {args.output_json}...")
-        with open(args.output_json, "w") as f:
+    if cfg.output_json:
+        print(f"Saving results to {cfg.output_json}...")
+        with open(cfg.output_json, "w") as f:
             json.dump({
                 "config": {
-                    "batch_size": args.batch_size,
-                    "num_cameras": args.num_cameras,
-                    "feature_h": args.feature_h,
-                    "feature_w": args.feature_w,
-                    "in_channels": args.in_channels,
-                    "out_channels": args.out_channels,
-                    "input_h": args.input_h,
-                    "input_w": args.input_w,
-                    "downsample": args.downsample,
-                    "num_warmup": args.num_warmup,
-                    "num_iterations": args.num_iterations,
-                    "device": args.device,
+                    "batch_size": cfg.batch_size,
+                    "num_cameras": cfg.num_cameras,
+                    "feature_h": cfg.feature_h,
+                    "feature_w": cfg.feature_w,
+                    "in_channels": cfg.in_channels,
+                    "out_channels": cfg.out_channels,
+                    "input_h": cfg.input_h,
+                    "input_w": cfg.input_w,
+                    "downsample": cfg.downsample,
+                    "num_warmup": cfg.num_warmup,
+                    "num_iterations": cfg.num_iterations,
+                    "device": cfg.device,
                     "grid_config": grid_config,
                     "num_height_bins": exp_config["num_height_bins_list"],
                     "num_cameras_list": exp_config["num_cameras_list"] if exp_config["has_cameras_exp"] else None,
@@ -404,12 +360,11 @@ def save_results(all_results, args, grid_config, exp_config):
         print("  ✓ Saved JSON")
 
 
-def main():
+@hydra.main(version_base=None, config_path="config", config_name="config")
+def main(cfg: DictConfig):
     """Main entry point."""
-    args = parse_arguments()
-    
-    grid_config = json.loads(args.grid_config) if args.grid_config else DEFAULT_GRID_CONFIG.copy()
-    exp_config = determine_experiment_type(args)
+    grid_config = OmegaConf.to_container(cfg.grid_config) if cfg.grid_config else DEFAULT_GRID_CONFIG.copy()
+    exp_config = determine_experiment_type(cfg)
     
     if exp_config["has_height_bins_exp"]:
         exp_config["x_axis_label"] = "num_height_bins"
@@ -433,39 +388,39 @@ def main():
         exp_config["latency_plot_name"] = "latency_vs_num_cameras.png"
         exp_config["x_axis_values"] = exp_config["num_cameras_list"]
     
-    methods = [m for m in DEFAULT_METHODS if m["fuse_projection"] and not m.get("use_bev_pool", False)] if args.kernel_only else DEFAULT_METHODS
+    methods = [m for m in DEFAULT_METHODS if m["fuse_projection"] and not m.get("use_bev_pool", False)] if cfg.kernel_only else DEFAULT_METHODS
     
-    if args.kernel_only:
+    if cfg.kernel_only:
         print("Kernel-only mode: Only benchmarking FlashBEV methods (no mmdet3d required)")
     
     calib_params = None
-    if args.load_calib:
-        calib_params = load_calibration_params(args.load_calib, device=args.device)
-    elif not args.kernel_only:
-        print("Warning: --load-calib not provided. Using dummy calibration parameters.")
+    if cfg.load_calib:
+        calib_params = load_calibration_params(cfg.load_calib, device=cfg.device)
+    elif not cfg.kernel_only:
+        print("Warning: load_calib not provided. Using dummy calibration parameters.")
     
-    depth_distribution_int = 1 if args.depth_distribution == "laplace" else 0
+    depth_distribution_int = 1 if cfg.depth_distribution == "laplace" else 0
     
     print("\n" + "=" * 80)
     print("Benchmarking View Transform Methods")
     print("=" * 80)
-    print(f"Batch size: {args.batch_size}")
-    print(f"Feature size: {args.feature_h} x {args.feature_w}")
-    print(f"Input size: {args.input_h} x {args.input_w}")
+    print(f"Batch size: {cfg.batch_size}")
+    print(f"Feature size: {cfg.feature_h} x {cfg.feature_w}")
+    print(f"Input size: {cfg.input_h} x {cfg.input_w}")
     print(f"Grid config: {grid_config}")
-    print(f"Warmup iterations: {args.num_warmup}")
-    print(f"Benchmark iterations: {args.num_iterations}")
+    print(f"Warmup iterations: {cfg.num_warmup}")
+    print(f"Benchmark iterations: {cfg.num_iterations}")
     print("=" * 80 + "\n")
     
     all_results, memory_data, exp_config = run_experiment(
-        args, exp_config, grid_config, methods, calib_params, depth_distribution_int
+        cfg, exp_config, grid_config, methods, calib_params, depth_distribution_int
     )
     
     print_summary(all_results, exp_config, exp_config["x_axis_values"])
     
     outputs_dir = setup_output_directory()
     plot_output, latency_plot_output = get_plot_paths(
-        args.plot_output, exp_config["default_plot_name"],
+        cfg.plot_output, exp_config["default_plot_name"],
         exp_config["latency_plot_name"], outputs_dir
     )
     
@@ -479,7 +434,7 @@ def main():
             latency_plot_output, exp_config["has_height_bins_exp"], exp_config["has_depth_threshold_exp"]
         )
     
-    save_results(all_results, args, grid_config, exp_config)
+    save_results(all_results, cfg, grid_config, exp_config)
     
     print("\nBenchmark complete!")
 

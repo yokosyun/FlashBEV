@@ -1,0 +1,44 @@
+# Benchmark configuration for FlashBEV
+
+# Model parameters
+batch_size: 1
+num_cameras: 6
+feature_h: 16
+feature_w: 44
+in_channels: 256
+out_channels: 64
+input_h: 256
+input_w: 704
+downsample: 16
+
+# Benchmark parameters
+num_warmup: 10
+num_iterations: 100
+device: cuda
+
+# Experiment configuration
+# Specify one of: num_height_bins, num_cameras_list, or depth_weight_threshold_list
+num_height_bins: null  # e.g., [8, 10, 16, 20, 40] or null for default
+num_cameras_list: null  # e.g., [1, 2, 3, 4, 5, 6] or null
+depth_weight_threshold_list: null  # e.g., [1e-6, 1e-5, 1e-4, 1e-3] or null
+
+# Depth distribution
+depth_distribution: laplace  # laplace or gaussian
+depth_weight_threshold: 0.0
+
+# Grid configuration (NuScenes-like)
+grid_config:
+  x: [-51.2, 51.2, 0.8]
+  y: [-51.2, 51.2, 0.4]
+  z: [-5.0, 3.0, 8.0]
+  depth: [1.0, 60.0, 1.0]
+
+# Input/Output paths
+load_calib: null  # Path to calibration JSON file
+output_csv: null  # Path to save CSV results
+output_json: null  # Path to save JSON results
+plot_output: null  # Path for plot (auto-determined if null)
+
+# Mode
+kernel_only: false  # Benchmark FlashBEVPool kernel only (no mmdet3d dependency)
+

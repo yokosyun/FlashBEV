@@ -1,15 +1,5 @@
 """Configuration constants for benchmarking."""
 
-DEFAULT_GRID_CONFIG = {
-    "x": [-51.2, 51.2, 0.8],
-    "y": [-51.2, 51.2, 0.4],
-    "z": [-5.0, 3.0, 8.0],
-    "depth": [1.0, 60.0, 1.0],
-}
-
-Z_MIN, Z_MAX = -5.0, 3.0
-Z_RANGE = Z_MAX - Z_MIN
-
 DEFAULT_METHODS = [
     {
         "name": "FlashBEV(baseline)",

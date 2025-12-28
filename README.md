@@ -13,6 +13,13 @@ cd flashbev && uv pip install . -e
 ```
 
 # Benchmark
+
+## Using default config
+```bash
+uv run python tools/benchmark.py
 ```
-python3 tools/benchmark.py --num-height-bins 8,10,16,20,40
-```
+
+## Override config from command line
+```bash
+# With calibration file and height bins
+uv run python tools/benchmark.py load_calib=inputs/calib_nuscenes.json num_height_bins=[8,10,16,20,40]

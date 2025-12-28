@@ -26,7 +26,7 @@ from utils.benchmark_utils import (
     benchmark_flashbevpool_kernel,
     benchmark_method,
 )
-from utils.config import DEFAULT_GRID_CONFIG, DEFAULT_METHODS, Z_MAX, Z_MIN, Z_RANGE
+from utils.config import DEFAULT_METHODS
 from utils.data_utils import (
     create_dummy_input,
     create_flashbevpool_data,
@@ -57,21 +57,28 @@ def determine_experiment_type(cfg: DictConfig):
         num_height_bins_list = [10]
         has_height_bins_exp = True
     elif has_height_bins_exp:
-        num_height_bins_list = cfg.num_height_bins if isinstance(cfg.num_height_bins, list) else [cfg.num_height_bins]
+        num_height_bins_list = OmegaConf.to_container(cfg.num_height_bins, resolve=True)
+        if not isinstance(num_height_bins_list, list):
+            num_height_bins_list = [num_height_bins_list]
     else:
         num_height_bins_list = [10]
     
     if has_depth_threshold_exp:
-        depth_weight_threshold_list = cfg.depth_weight_threshold_list if isinstance(cfg.depth_weight_threshold_list, list) else [cfg.depth_weight_threshold_list]
+        depth_weight_threshold_list = OmegaConf.to_container(cfg.depth_weight_threshold_list, resolve=True)
+        if not isinstance(depth_weight_threshold_list, list):
+            depth_weight_threshold_list = [depth_weight_threshold_list]
     else:
         depth_weight_threshold_list = [cfg.depth_weight_threshold]
     
     if has_cameras_exp:
-        num_cameras_list = cfg.num_cameras_list if isinstance(cfg.num_cameras_list, list) else [cfg.num_cameras_list]
+        num_cameras_list = OmegaConf.to_container(cfg.num_cameras_list, resolve=True)
+        if not isinstance(num_cameras_list, list):
+            num_cameras_list = [num_cameras_list]
     else:
         num_cameras_list = [cfg.num_cameras]
     
-    z_resolutions = [Z_RANGE / num_bins for num_bins in num_height_bins_list]
+    z_range = cfg.z_max - cfg.z_min
+    z_resolutions = [z_range / float(num_bins) for num_bins in num_height_bins_list]
     
     return {
         "has_height_bins_exp": has_height_bins_exp,
@@ -149,7 +156,7 @@ def run_single_benchmark(
             
             transformer = create_view_transformer(
                 grid_config=grid_config,
-                sample_grid_z=sample_grid_z or [Z_MIN, Z_MAX, z_res],
+                sample_grid_z=sample_grid_z or [cfg.z_min, cfg.z_max, z_res],
                 input_size=input_size,
                 in_channels=cfg.in_channels,
                 out_channels=cfg.out_channels,
@@ -249,7 +256,7 @@ def run_experiment(
         print(f"Testing {value_key}: {value}")
         print(f"{'='*80}\n")
         
-        sample_grid_z = [Z_MIN, Z_MAX, z_res]
+        sample_grid_z = [cfg.z_min, cfg.z_max, z_res]
         input_list = None
         
         if not cfg.kernel_only and any(not (m["fuse_projection"] and not m.get("use_bev_pool", False)) for m in methods):
@@ -363,7 +370,12 @@ def save_results(all_results, cfg: DictConfig, grid_config: Dict, exp_config: Di
 @hydra.main(version_base=None, config_path="config", config_name="config")
 def main(cfg: DictConfig):
     """Main entry point."""
-    grid_config = OmegaConf.to_container(cfg.grid_config) if cfg.grid_config else DEFAULT_GRID_CONFIG.copy()
+    grid_config = OmegaConf.to_container(cfg.grid_config) if cfg.grid_config else {
+        "x": [-51.2, 51.2, 0.8],
+        "y": [-51.2, 51.2, 0.4],
+        "z": [cfg.z_min, cfg.z_max, cfg.z_max - cfg.z_min],
+        "depth": [1.0, 60.0, 1.0],
+    }
     exp_config = determine_experiment_type(cfg)
     
     if exp_config["has_height_bins_exp"]:

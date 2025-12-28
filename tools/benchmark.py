@@ -140,7 +140,6 @@ def run_single_benchmark(
                 depth_weight_threshold=depth_threshold,
                 num_warmup=cfg.num_warmup,
                 num_iterations=cfg.num_iterations,
-                device=cfg.device,
             )
         else:
             if input_list is None:
@@ -180,7 +179,6 @@ def run_single_benchmark(
                 input_list=input_list,
                 num_warmup=cfg.num_warmup,
                 num_iterations=cfg.num_iterations,
-                device=cfg.device,
             )
         
         print(f"  ✓ Latency: {stats['latency_mean_ms']:.2f} ± {stats['latency_std_ms']:.2f} ms")
@@ -370,12 +368,7 @@ def save_results(all_results, cfg: DictConfig, grid_config: Dict, exp_config: Di
 @hydra.main(version_base=None, config_path="config", config_name="config")
 def main(cfg: DictConfig):
     """Main entry point."""
-    grid_config = OmegaConf.to_container(cfg.grid_config) if cfg.grid_config else {
-        "x": [-51.2, 51.2, 0.8],
-        "y": [-51.2, 51.2, 0.4],
-        "z": [cfg.z_min, cfg.z_max, cfg.z_max - cfg.z_min],
-        "depth": [1.0, 60.0, 1.0],
-    }
+    grid_config = OmegaConf.to_container(cfg.grid_config, resolve=True)
     exp_config = determine_experiment_type(cfg)
     
     if exp_config["has_height_bins_exp"]:

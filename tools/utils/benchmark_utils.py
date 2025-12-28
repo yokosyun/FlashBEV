@@ -18,7 +18,6 @@ def benchmark_flashbevpool_kernel(
     depth_weight_threshold: float = 0.0,
     num_warmup: int = 10,
     num_iterations: int = 100,
-    device: str = "cuda",
 ) -> Dict[str, float]:
     """Benchmark FlashBEVPool kernel directly (no mmdet3d dependency)."""
     with torch.no_grad():
@@ -96,7 +95,6 @@ def benchmark_method(
     input_list: List[torch.Tensor],
     num_warmup: int = 10,
     num_iterations: int = 100,
-    device: str = "cuda",
 ) -> Dict[str, float]:
     """Benchmark a view transform method."""
     with torch.no_grad():

@@ -197,6 +197,8 @@ def run_single_benchmark(
     except Exception as e:
         print(f"  ✗ Error: {e}")
         import traceback
+        if "CUDA error" in str(e):
+            print("  Note: This may be a kernel-specific issue. Try running with different parameters.")
         traceback.print_exc()
         return None
 
@@ -210,12 +212,16 @@ def run_experiment(
     depth_distribution_int: int,
 ):
     """Run the benchmark experiment."""
-    grid_x = int((grid_config["x"][1] - grid_config["x"][0]) / grid_config["x"][2])
-    grid_y = int((grid_config["y"][1] - grid_config["y"][0]) / grid_config["y"][2])
+    grid_x = int((float(grid_config["x"][1]) - float(grid_config["x"][0])) / float(grid_config["x"][2]))
+    grid_y = int((float(grid_config["y"][1]) - float(grid_config["y"][0])) / float(grid_config["y"][2]))
+    
+    if grid_x <= 0 or grid_y <= 0:
+        raise ValueError(f"Invalid grid dimensions: grid_x={grid_x}, grid_y={grid_y}. Check grid_config values.")
+    
     roi_range = [
-        grid_config["x"][0], grid_config["x"][1],
-        grid_config["y"][0], grid_config["y"][1],
-        grid_config["z"][0], grid_config["z"][1],
+        float(grid_config["x"][0]), float(grid_config["x"][1]),
+        float(grid_config["y"][0]), float(grid_config["y"][1]),
+        float(grid_config["z"][0]), float(grid_config["z"][1]),
     ]
     input_size = (cfg.input_h, cfg.input_w)
     
@@ -286,10 +292,10 @@ def run_experiment(
                 memory_data[method_name]["latency_ms"].append(result['latency_mean_ms'])
             
             print()
-    
+                    
     return all_results, memory_data, exp_config
-
-
+                    
+                
 def print_summary(all_results, exp_config, x_axis_values):
     """Print summary table."""
     print("\n" + "=" * 80)
@@ -323,7 +329,7 @@ def print_summary(all_results, exp_config, x_axis_values):
         print(f"Tested {len(x_axis_values)} values: {x_axis_values}")
         print(f"Total results: {len(all_results)}")
     print()
-
+    
 
 def save_results(all_results, cfg: DictConfig, grid_config: Dict, exp_config: Dict):
     """Save results to CSV/JSON files."""
@@ -363,7 +369,7 @@ def save_results(all_results, cfg: DictConfig, grid_config: Dict, exp_config: Di
                 "results": all_results,
             }, f, indent=2)
         print("  ✓ Saved JSON")
-
+    
 
 @hydra.main(version_base=None, config_path="config", config_name="config")
 def main(cfg: DictConfig):
@@ -393,7 +399,10 @@ def main(cfg: DictConfig):
         exp_config["latency_plot_name"] = "latency_vs_num_cameras.png"
         exp_config["x_axis_values"] = exp_config["num_cameras_list"]
     
-    methods = [m for m in DEFAULT_METHODS if m["fuse_projection"] and not m.get("use_bev_pool", False)] if cfg.kernel_only else DEFAULT_METHODS
+    if cfg.kernel_only:
+        methods = [m for m in DEFAULT_METHODS if m["fuse_projection"] and not m.get("use_bev_pool", False) and not m.get("use_warp_kernel", False)]
+    else:
+        methods = DEFAULT_METHODS
     
     if cfg.kernel_only:
         print("Kernel-only mode: Only benchmarking FlashBEV methods (no mmdet3d required)")

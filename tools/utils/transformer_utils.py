@@ -1,7 +1,5 @@
 from typing import Dict, Tuple
 
-import torch
-
 from flashbevpool import SamplingVT
 
 

@@ -43,8 +43,12 @@ from utils.transformer_utils import create_view_transformer
 from tabulate import tabulate
 
 
+def _to_list(value):
+    converted = OmegaConf.to_container(value, resolve=True) if value is not None else None
+    return converted if isinstance(converted, list) else [converted] if converted is not None else None
+
+
 def determine_experiment_type(cfg: DictConfig):
-    """Determine experiment type and parse parameters."""
     has_height_bins_exp = cfg.num_height_bins is not None
     has_cameras_exp = cfg.num_cameras_list is not None
     has_depth_threshold_exp = cfg.depth_weight_threshold_list is not None
@@ -57,25 +61,12 @@ def determine_experiment_type(cfg: DictConfig):
         num_height_bins_list = [10]
         has_height_bins_exp = True
     elif has_height_bins_exp:
-        num_height_bins_list = OmegaConf.to_container(cfg.num_height_bins, resolve=True)
-        if not isinstance(num_height_bins_list, list):
-            num_height_bins_list = [num_height_bins_list]
+        num_height_bins_list = _to_list(cfg.num_height_bins)
     else:
         num_height_bins_list = [10]
     
-    if has_depth_threshold_exp:
-        depth_weight_threshold_list = OmegaConf.to_container(cfg.depth_weight_threshold_list, resolve=True)
-        if not isinstance(depth_weight_threshold_list, list):
-            depth_weight_threshold_list = [depth_weight_threshold_list]
-    else:
-        depth_weight_threshold_list = [cfg.depth_weight_threshold]
-    
-    if has_cameras_exp:
-        num_cameras_list = OmegaConf.to_container(cfg.num_cameras_list, resolve=True)
-        if not isinstance(num_cameras_list, list):
-            num_cameras_list = [num_cameras_list]
-    else:
-        num_cameras_list = [cfg.num_cameras]
+    depth_weight_threshold_list = _to_list(cfg.depth_weight_threshold_list) if has_depth_threshold_exp else [cfg.depth_weight_threshold]
+    num_cameras_list = _to_list(cfg.num_cameras_list) if has_cameras_exp else [cfg.num_cameras]
     
     z_range = cfg.z_max - cfg.z_min
     z_resolutions = [z_range / float(num_bins) for num_bins in num_height_bins_list]
@@ -377,32 +368,37 @@ def main(cfg: DictConfig):
     grid_config = OmegaConf.to_container(cfg.grid_config, resolve=True)
     exp_config = determine_experiment_type(cfg)
     
-    if exp_config["has_height_bins_exp"]:
-        exp_config["x_axis_label"] = "num_height_bins"
-        exp_config["plot_title"] = "Memory Usage vs Num Height Bins"
-        exp_config["default_plot_name"] = "memory_vs_num_height_bins.png"
-        exp_config["latency_plot_title"] = "Latency vs Num Height Bins"
-        exp_config["latency_plot_name"] = "latency_vs_num_height_bins.png"
-        exp_config["x_axis_values"] = exp_config["num_height_bins_list"]
-    elif exp_config["has_depth_threshold_exp"]:
-        exp_config["x_axis_label"] = "depth_weight_threshold"
-        exp_config["plot_title"] = "Memory Usage vs Depth Weight Threshold"
-        exp_config["default_plot_name"] = "memory_vs_depth_weight_threshold.png"
-        exp_config["latency_plot_title"] = "Latency vs Depth Weight Threshold"
-        exp_config["latency_plot_name"] = "latency_vs_depth_weight_threshold.png"
-        exp_config["x_axis_values"] = exp_config["depth_weight_threshold_list"]
-    else:
-        exp_config["x_axis_label"] = "num_cameras"
-        exp_config["plot_title"] = "Memory Usage vs Num Cameras"
-        exp_config["default_plot_name"] = "memory_vs_num_cameras.png"
-        exp_config["latency_plot_title"] = "Latency vs Num Cameras"
-        exp_config["latency_plot_name"] = "latency_vs_num_cameras.png"
-        exp_config["x_axis_values"] = exp_config["num_cameras_list"]
+    exp_type_configs = {
+        "height_bins": {
+            "x_axis_label": "num_height_bins",
+            "plot_title": "Memory Usage vs Num Height Bins",
+            "default_plot_name": "memory_vs_num_height_bins.png",
+            "latency_plot_title": "Latency vs Num Height Bins",
+            "latency_plot_name": "latency_vs_num_height_bins.png",
+            "x_axis_values": exp_config["num_height_bins_list"],
+        },
+        "depth_threshold": {
+            "x_axis_label": "depth_weight_threshold",
+            "plot_title": "Memory Usage vs Depth Weight Threshold",
+            "default_plot_name": "memory_vs_depth_weight_threshold.png",
+            "latency_plot_title": "Latency vs Depth Weight Threshold",
+            "latency_plot_name": "latency_vs_depth_weight_threshold.png",
+            "x_axis_values": exp_config["depth_weight_threshold_list"],
+        },
+        "cameras": {
+            "x_axis_label": "num_cameras",
+            "plot_title": "Memory Usage vs Num Cameras",
+            "default_plot_name": "memory_vs_num_cameras.png",
+            "latency_plot_title": "Latency vs Num Cameras",
+            "latency_plot_name": "latency_vs_num_cameras.png",
+            "x_axis_values": exp_config["num_cameras_list"],
+        },
+    }
     
-    if cfg.kernel_only:
-        methods = [m for m in DEFAULT_METHODS if m["fuse_projection"] and not m.get("use_bev_pool", False) and not m.get("use_warp_kernel", False)]
-    else:
-        methods = DEFAULT_METHODS
+    exp_type = "height_bins" if exp_config["has_height_bins_exp"] else ("depth_threshold" if exp_config["has_depth_threshold_exp"] else "cameras")
+    exp_config.update(exp_type_configs[exp_type])
+    
+    methods = [m for m in DEFAULT_METHODS if m["fuse_projection"] and not m.get("use_bev_pool", False) and not m.get("use_warp_kernel", False)] if cfg.kernel_only else DEFAULT_METHODS
     
     if cfg.kernel_only:
         print("Kernel-only mode: Only benchmarking FlashBEV methods (no mmdet3d required)")

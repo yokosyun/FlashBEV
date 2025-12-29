@@ -1,4 +1,3 @@
-import os
 from pathlib import Path
 from typing import Dict, Tuple
 
@@ -6,7 +5,6 @@ import matplotlib.pyplot as plt
 
 
 def setup_output_directory() -> Path:
-    """Create outputs directory if it doesn't exist."""
     outputs_dir = Path("outputs")
     outputs_dir.mkdir(exist_ok=True)
     return outputs_dir
@@ -18,12 +16,8 @@ def get_plot_paths(
     latency_plot_name: str,
     outputs_dir: Path,
 ) -> Tuple[str, str]:
-    """Determine plot output paths."""
     if plot_output:
-        if os.path.dirname(plot_output):
-            plot_path = plot_output
-        else:
-            plot_path = str(outputs_dir / plot_output)
+        plot_path = plot_output if "/" in plot_output or "\\" in plot_output else str(outputs_dir / plot_output)
         latency_plot_path = plot_path.replace("memory", "latency")
     else:
         plot_path = str(outputs_dir / default_plot_name)
@@ -40,7 +34,6 @@ def plot_memory_vs_x(
     has_height_bins_exp: bool,
     has_depth_threshold_exp: bool,
 ):
-    """Plot memory usage vs x-axis variable with error bars for multiple runs."""
     print(f"Generating memory plot: {plot_output}...")
     plt.figure(figsize=(10, 6))
     
@@ -122,7 +115,6 @@ def plot_latency_vs_x(
     has_height_bins_exp: bool,
     has_depth_threshold_exp: bool,
 ):
-    """Plot latency vs x-axis variable with error bars for multiple runs."""
     print(f"Generating latency plot: {latency_plot_output}...")
     plt.figure(figsize=(10, 6))
     

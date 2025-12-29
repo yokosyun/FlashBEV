@@ -1,3 +1,5 @@
+// Copyright (c) Shunsuke Yokokawa. All rights reserved.
+
 #include <stdio.h>
 
 template <bool USE_SHARED, int DEPTH_DISTRIBUTION, bool OPTIMIZE_Z_PRECOMPUTE = true> // DEPTH_DISTRIBUTION: 0=gaussian, 1=laplace, OPTIMIZE_Z_PRECOMPUTE: optimize z-independent projection

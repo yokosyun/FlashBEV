@@ -1,5 +1,4 @@
-// Copyright (c) Phigent Robotics. All rights reserved.
-// Reference https://arxiv.org/abs/2211.17111
+// Copyright (c) Shunsuke Yokokawa. All rights reserved.
 
 #include <stdio.h>
 #include <stdlib.h>

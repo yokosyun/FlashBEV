@@ -14,6 +14,7 @@ downsample: 16
 # Benchmark parameters
 num_warmup: 10
 num_iterations: 100
+num_runs: 1  # Number of independent runs for statistical significance (recommend 5-10 for publication)
 device: cuda
 
 # Experiment configuration

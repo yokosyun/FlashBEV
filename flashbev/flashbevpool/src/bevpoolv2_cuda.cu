@@ -1,5 +1,4 @@
-// Copyright (c) Phigent Robotics. All rights reserved.
-// Reference https://arxiv.org/abs/2211.17111
+// Copyright (c) Shunsuke Yokokawa. All rights reserved.
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -7,6 +6,9 @@
 
 /*
   Function: pillar pooling
+  Copyright (c) Phigent Robotics. All rights reserved.
+  Reference https://arxiv.org/abs/2211.17111
+  
   Args:
     c                : number of channels
     n_intervals      : number of unique points
@@ -50,6 +52,9 @@ __global__ void bev_pool_v2_classification_nearest_kernel(int c, int n_intervals
 
 /*
   Function: pillar pooling backward
+  Copyright (c) Phigent Robotics. All rights reserved.
+  Reference https://arxiv.org/abs/2211.17111
+  
   Args:
     c                : number of channels
     n_intervals      : number of unique points

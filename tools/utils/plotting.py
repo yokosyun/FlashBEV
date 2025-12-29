@@ -40,12 +40,14 @@ def plot_memory_vs_x(
     has_height_bins_exp: bool,
     has_depth_threshold_exp: bool,
 ):
-    """Plot memory usage vs x-axis variable."""
+    """Plot memory usage vs x-axis variable with error bars for multiple runs."""
     print(f"Generating memory plot: {plot_output}...")
     plt.figure(figsize=(10, 6))
     
     colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b']
     markers = ['o', 's', '^', 'D', 'v', 'p']
+    
+    has_multiple_runs = any("individual_runs" in data for data in memory_data.values())
     
     for idx, (method_name, data) in enumerate(memory_data.items()):
         if len(data[x_axis_label]) > 0:
@@ -54,14 +56,44 @@ def plot_memory_vs_x(
             sorted_pairs = sorted(zip(x_values, memory))
             x_sorted, memory_sorted = zip(*sorted_pairs)
             
-            plt.plot(
-                x_sorted, memory_sorted,
-                marker=markers[idx % len(markers)],
-                label=method_name,
-                linewidth=2,
-                markersize=8,
-                color=colors[idx % len(colors)]
-            )
+            if has_multiple_runs and "memory_std" in data and len(data["memory_std"]) > 0:
+                memory_std = data["memory_std"]
+                sorted_std_pairs = sorted(zip(x_values, memory_std))
+                _, memory_std_sorted = zip(*sorted_std_pairs)
+                
+                plt.errorbar(
+                    x_sorted, memory_sorted, yerr=memory_std_sorted,
+                    marker=markers[idx % len(markers)],
+                    label=method_name,
+                    linewidth=2,
+                    markersize=8,
+                    color=colors[idx % len(colors)],
+                    capsize=4,
+                    capthick=1.5,
+                    elinewidth=1.5
+                )
+                
+                if "individual_runs" in data and len(data["individual_runs"]) == len(x_values):
+                    for x_val_idx, x_val in enumerate(x_sorted):
+                        if x_val_idx < len(data["individual_runs"]) and data["individual_runs"][x_val_idx]:
+                            run_memory = [r["peak_memory_allocated_mb"] for r in data["individual_runs"][x_val_idx]]
+                            plt.scatter(
+                                [x_val] * len(run_memory), run_memory,
+                                alpha=0.3,
+                                s=20,
+                                color=colors[idx % len(colors)],
+                                edgecolors='none',
+                                zorder=0
+                            )
+            else:
+                plt.plot(
+                    x_sorted, memory_sorted,
+                    marker=markers[idx % len(markers)],
+                    label=method_name,
+                    linewidth=2,
+                    markersize=8,
+                    color=colors[idx % len(colors)]
+                )
     
     if has_height_bins_exp:
         xlabel = "Num Height Bins"
@@ -90,12 +122,14 @@ def plot_latency_vs_x(
     has_height_bins_exp: bool,
     has_depth_threshold_exp: bool,
 ):
-    """Plot latency vs x-axis variable."""
+    """Plot latency vs x-axis variable with error bars for multiple runs."""
     print(f"Generating latency plot: {latency_plot_output}...")
     plt.figure(figsize=(10, 6))
     
     colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b']
     markers = ['o', 's', '^', 'D', 'v', 'p']
+    
+    has_multiple_runs = any("individual_runs" in data for data in memory_data.values())
     
     for idx, (method_name, data) in enumerate(memory_data.items()):
         if len(data[x_axis_label]) > 0:
@@ -104,14 +138,44 @@ def plot_latency_vs_x(
             sorted_pairs = sorted(zip(x_values, latency))
             x_sorted, latency_sorted = zip(*sorted_pairs)
             
-            plt.plot(
-                x_sorted, latency_sorted,
-                marker=markers[idx % len(markers)],
-                label=method_name,
-                linewidth=2,
-                markersize=8,
-                color=colors[idx % len(colors)]
-            )
+            if has_multiple_runs and "latency_std" in data and len(data["latency_std"]) > 0:
+                latency_std = data["latency_std"]
+                sorted_std_pairs = sorted(zip(x_values, latency_std))
+                _, latency_std_sorted = zip(*sorted_std_pairs)
+                
+                plt.errorbar(
+                    x_sorted, latency_sorted, yerr=latency_std_sorted,
+                    marker=markers[idx % len(markers)],
+                    label=method_name,
+                    linewidth=2,
+                    markersize=8,
+                    color=colors[idx % len(colors)],
+                    capsize=4,
+                    capthick=1.5,
+                    elinewidth=1.5
+                )
+                
+                if "individual_runs" in data and len(data["individual_runs"]) == len(x_values):
+                    for x_val_idx, x_val in enumerate(x_sorted):
+                        if x_val_idx < len(data["individual_runs"]) and data["individual_runs"][x_val_idx]:
+                            run_latency = [r["latency_mean_ms"] for r in data["individual_runs"][x_val_idx]]
+                            plt.scatter(
+                                [x_val] * len(run_latency), run_latency,
+                                alpha=0.3,
+                                s=20,
+                                color=colors[idx % len(colors)],
+                                edgecolors='none',
+                                zorder=0
+                            )
+            else:
+                plt.plot(
+                    x_sorted, latency_sorted,
+                    marker=markers[idx % len(markers)],
+                    label=method_name,
+                    linewidth=2,
+                    markersize=8,
+                    color=colors[idx % len(colors)]
+                )
     
     if has_height_bins_exp:
         xlabel = "Num Height Bins"

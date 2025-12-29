@@ -276,20 +276,76 @@ def run_experiment(
         
         for method_config in methods:
             method_name = method_config["name"]
-            print(f"Benchmarking {method_name} ({value_key}={value})...")
+            num_runs = cfg.get("num_runs", 1)
             
-            result = run_single_benchmark(
-                method_config, cfg, grid_config, grid_x, grid_y, roi_range,
-                input_size, calib_params, num_bins, z_res, num_cams,
-                depth_threshold, depth_distribution_int, input_list, sample_grid_z,
-                cfg.kernel_only,
-            )
-            
-            if result:
-                all_results.append(result)
-                memory_data[method_name][exp_config["x_axis_label"]].append(value)
-                memory_data[method_name]["memory_mb"].append(result['peak_memory_allocated_mb'])
-                memory_data[method_name]["latency_ms"].append(result['latency_mean_ms'])
+            if num_runs > 1:
+                print(f"Benchmarking {method_name} ({value_key}={value}) - {num_runs} independent runs...")
+                run_results = []
+                
+                for run_idx in range(num_runs):
+                    print(f"  Run {run_idx + 1}/{num_runs}...", end=" ", flush=True)
+                    result = run_single_benchmark(
+                        method_config, cfg, grid_config, grid_x, grid_y, roi_range,
+                        input_size, calib_params, num_bins, z_res, num_cams,
+                        depth_threshold, depth_distribution_int, input_list, sample_grid_z,
+                        cfg.kernel_only,
+                    )
+                    
+                    if result:
+                        result["run_id"] = run_idx
+                        run_results.append(result)
+                        print(f"✓ ({result['latency_mean_ms']:.2f} ms)")
+                
+                if run_results:
+                    import numpy as np
+                    aggregated = {
+                        "method": method_name,
+                        "num_height_bins": num_bins,
+                        "num_cameras": num_cams,
+                        "z_resolution": z_res,
+                        "depth_weight_threshold": depth_threshold,
+                        **method_config,
+                        "latency_mean_ms": float(np.mean([r["latency_mean_ms"] for r in run_results])),
+                        "latency_std_ms": float(np.std([r["latency_mean_ms"] for r in run_results])),
+                        "latency_min_ms": float(np.min([r["latency_min_ms"] for r in run_results])),
+                        "latency_max_ms": float(np.max([r["latency_max_ms"] for r in run_results])),
+                        "latency_p50_ms": float(np.mean([r["latency_p50_ms"] for r in run_results])),
+                        "latency_p95_ms": float(np.mean([r["latency_p95_ms"] for r in run_results])),
+                        "latency_p99_ms": float(np.mean([r["latency_p99_ms"] for r in run_results])),
+                        "peak_memory_allocated_mb": float(np.mean([r["peak_memory_allocated_mb"] for r in run_results])),
+                        "peak_memory_reserved_mb": float(np.mean([r["peak_memory_reserved_mb"] for r in run_results])),
+                        "memory_std_mb": float(np.std([r["peak_memory_allocated_mb"] for r in run_results])),
+                        "num_runs": num_runs,
+                        "individual_runs": run_results,
+                    }
+                    
+                    all_results.append(aggregated)
+                    memory_data[method_name][exp_config["x_axis_label"]].append(value)
+                    memory_data[method_name]["memory_mb"].append(aggregated['peak_memory_allocated_mb'])
+                    memory_data[method_name]["latency_ms"].append(aggregated['latency_mean_ms'])
+                    
+                    if num_runs > 1:
+                        memory_data[method_name].setdefault("latency_std", []).append(aggregated['latency_std_ms'])
+                        memory_data[method_name].setdefault("memory_std", []).append(aggregated['memory_std_mb'])
+                        memory_data[method_name].setdefault("individual_runs", []).append(run_results)
+                    
+                    print(f"  → Aggregated: {aggregated['latency_mean_ms']:.2f} ± {aggregated['latency_std_ms']:.2f} ms")
+                    print(f"  → Memory: {aggregated['peak_memory_allocated_mb']:.2f} ± {aggregated['memory_std_mb']:.2f} MB")
+            else:
+                print(f"Benchmarking {method_name} ({value_key}={value})...")
+                
+                result = run_single_benchmark(
+                    method_config, cfg, grid_config, grid_x, grid_y, roi_range,
+                    input_size, calib_params, num_bins, z_res, num_cams,
+                    depth_threshold, depth_distribution_int, input_list, sample_grid_z,
+                    cfg.kernel_only,
+                )
+                
+                if result:
+                    all_results.append(result)
+                    memory_data[method_name][exp_config["x_axis_label"]].append(value)
+                    memory_data[method_name]["memory_mb"].append(result['peak_memory_allocated_mb'])
+                    memory_data[method_name]["latency_ms"].append(result['latency_mean_ms'])
             
             print()
                     
@@ -312,12 +368,20 @@ def print_summary(all_results, exp_config, x_axis_values):
         
         table_data = []
         for result in current_results:
+            num_runs = result.get("num_runs", 1)
+            if num_runs > 1:
+                latency_str = f"{result['latency_mean_ms']:.2f} ± {result['latency_std_ms']:.2f} (n={num_runs})"
+                memory_str = f"{result['peak_memory_allocated_mb']:.2f} ± {result.get('memory_std_mb', 0):.2f}"
+            else:
+                latency_str = f"{result['latency_mean_ms']:.2f} ± {result['latency_std_ms']:.2f}"
+                memory_str = f"{result['peak_memory_allocated_mb']:.2f}"
+            
             table_data.append([
                 result["method"],
-                f"{result['latency_mean_ms']:.2f} ± {result['latency_std_ms']:.2f}",
+                latency_str,
                 f"{result['latency_p95_ms']:.2f}",
                 f"{result['latency_p99_ms']:.2f}",
-                f"{result['peak_memory_allocated_mb']:.2f}",
+                memory_str,
                 f"{result['peak_memory_reserved_mb']:.2f}",
             ])
         
@@ -342,9 +406,16 @@ def save_results(all_results, cfg: DictConfig, grid_config: Dict, exp_config: Di
                 writer.writerows(all_results)
         print("  ✓ Saved CSV")
     
-    if cfg.output_json:
-        print(f"Saving results to {cfg.output_json}...")
-        with open(cfg.output_json, "w") as f:
+    output_json = cfg.output_json
+    if not output_json and all_results:
+        from pathlib import Path
+        outputs_dir = Path("outputs")
+        outputs_dir.mkdir(exist_ok=True)
+        output_json = str(outputs_dir / "benchmark_results.json")
+    
+    if output_json:
+        print(f"Saving results to {output_json}...")
+        with open(output_json, "w") as f:
             json.dump({
                 "config": {
                     "batch_size": cfg.batch_size,
@@ -369,6 +440,7 @@ def save_results(all_results, cfg: DictConfig, grid_config: Dict, exp_config: Di
                 "results": all_results,
             }, f, indent=2)
         print("  ✓ Saved JSON")
+        print(f"  → Run 'python tools/paper_results.py --results-json {output_json}' to generate paper-ready tables")
     
 
 @hydra.main(version_base=None, config_path="config", config_name="config")
@@ -424,6 +496,9 @@ def main(cfg: DictConfig):
     print(f"Grid config: {grid_config}")
     print(f"Warmup iterations: {cfg.num_warmup}")
     print(f"Benchmark iterations: {cfg.num_iterations}")
+    num_runs = cfg.get("num_runs", 1)
+    if num_runs > 1:
+        print(f"Independent runs: {num_runs} (results will be aggregated)")
     print("=" * 80 + "\n")
     
     all_results, memory_data, exp_config = run_experiment(

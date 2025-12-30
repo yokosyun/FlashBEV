@@ -1,6 +1,12 @@
 # FlashBEV
 
 ## UV
+install uv
+```
+curl -LsSf https://astral.sh/uv/install.sh | sh
+source $HOME/.local/bin/env 
+```
+create environment
 ```
 uv venv --python 3.8
 source .venv/bin/activate

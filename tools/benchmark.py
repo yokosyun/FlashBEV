@@ -26,7 +26,6 @@ from utils.benchmark_utils import (
     benchmark_flashbevpool_kernel,
     benchmark_method,
 )
-from utils.config import DEFAULT_METHODS
 from utils.data_utils import (
     create_dummy_input,
     create_flashbevpool_data,
@@ -470,7 +469,7 @@ def main(cfg: DictConfig):
     exp_type = "height_bins" if exp_config["has_height_bins_exp"] else ("depth_threshold" if exp_config["has_depth_threshold_exp"] else "cameras")
     exp_config.update(exp_type_configs[exp_type])
     
-    methods = [m for m in DEFAULT_METHODS if m["fuse_projection"] and not m.get("use_bev_pool", False) and not m.get("use_warp_kernel", False)] if cfg.kernel_only else DEFAULT_METHODS
+    methods = [m for m in cfg.methods if m["fuse_projection"] and not m.get("use_bev_pool", False) and not m.get("use_warp_kernel", False)] if cfg.kernel_only else cfg.methods
     
     if cfg.kernel_only:
         print("Kernel-only mode: Only benchmarking FlashBEV methods (no mmdet3d required)")

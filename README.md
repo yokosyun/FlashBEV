@@ -38,4 +38,4 @@ uv run python tools/benchmark.py
 ## Override config from command line
 ```bash
 # With calibration file and height bins
-uv run python tools/benchmark.py load_calib=inputs/calib_nuscenes.json num_height_bins=[8,10,16,20,40]
+uv run python tools/benchmark.py load_calib=inputs/calib_nuscenes.json num_height_bins=[8,12,16,20,24,28,32]

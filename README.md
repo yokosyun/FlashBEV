@@ -7,10 +7,20 @@ source .venv/bin/activate
 ```
 
 ## Install
+
+### Using pyproject.toml (recommended)
+```bash
+# For just using the library (core dependencies only)
+uv sync
+
+# For running benchmarks (includes matplotlib, tabulate, hydra-core)
+uv sync --extra benchmark
+
+# Install the package itself (required after uv sync)
+cd flashbev && uv pip install -e .
 ```
-uv pip install -r requirements.txt
-cd flashbev && uv pip install . -e
-```
+
+**Note:** `uv sync` only installs packages listed in `pyproject.toml`. The `flashbev` package must be installed separately as it contains CUDA extensions built via `setup.py`.
 
 # Benchmark
 

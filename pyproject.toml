@@ -1,0 +1,24 @@
+[project]
+name = "flashbev"
+version = "0.1.0"
+description = "Fast BEV Pooling with Fused CUDA Kernels for 3D Object Detection"
+readme = "README.md"
+requires-python = ">=3.8"
+license = {text = "MIT"}
+authors = [
+    {name = "Shunsuke Yokokawa"}
+]
+
+dependencies = [
+    "torch>=2.1.0,<2.5.0; python_version<'3.9'",
+    "torch>=2.1.0; python_version>='3.9'",
+    "numpy",
+]
+
+[project.optional-dependencies]
+benchmark = [
+    "matplotlib",
+    "tabulate",
+    "hydra-core",
+]
+

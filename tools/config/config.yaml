@@ -16,6 +16,7 @@ num_warmup: 10
 num_iterations: 100
 num_runs: 1  # Number of independent runs for statistical significance (recommend 5-10 for publication)
 device: cuda
+seed: 42  # Random seed for reproducibility
 
 # Experiment configuration
 # Specify one of: num_height_bins, num_cameras_list, or depth_weight_threshold_list

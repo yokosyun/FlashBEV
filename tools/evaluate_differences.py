@@ -1,9 +1,11 @@
 # Copyright (c) Shunsuke Yokokawa. All rights reserved.
 
 import json
+import random
 from typing import Dict, List, Tuple
 
 import hydra
+import numpy as np
 import torch
 from omegaconf import DictConfig, OmegaConf
 from tabulate import tabulate
@@ -67,6 +69,17 @@ def compute_difference_metrics(
         return metrics
 
 
+def set_seed(seed: int):
+    """Set random seed for reproducibility."""
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(seed)
+        torch.backends.cudnn.deterministic = True
+        torch.backends.cudnn.benchmark = False
+
+
 def evaluate_methods(
     methods: List[Dict],
     input_list: List[torch.Tensor],
@@ -79,10 +92,13 @@ def evaluate_methods(
     device: str = "cuda",
     depth_distribution: str = "laplace",
     depth_weight_threshold: float = 0.0,
+    seed: int = 42,
 ) -> Dict:
     """Evaluate all methods and compare outputs against baseline."""
     if not methods:
         raise ValueError("No methods specified in config!")
+    
+    set_seed(seed)
     
     baseline_name = methods[0]["name"]
     baseline_output = None
@@ -92,7 +108,8 @@ def evaluate_methods(
     print("\n" + "=" * 80)
     print("Evaluating Output Differences")
     print("=" * 80)
-    print(f"Baseline: {baseline_name}\n")
+    print(f"Baseline: {baseline_name}")
+    print(f"Seed: {seed}\n")
     
     for method_config in methods:
         method_name = method_config["name"]
@@ -258,14 +275,13 @@ def main(cfg: DictConfig):
     
     depth_distribution = cfg.depth_distribution
     depth_weight_threshold = cfg.depth_weight_threshold
+    seed = cfg.get("seed", 42)
+    
+    set_seed(seed)
     
     calib_params = None
     if cfg.load_calib is not None:
         calib_params = load_calibration_params(cfg.load_calib, device=device)
-    
-    torch.manual_seed(42)
-    if device == "cuda":
-        torch.cuda.manual_seed_all(42)
     
     input_list, _ = create_dummy_input(
         batch_size=batch_size,
@@ -291,6 +307,7 @@ def main(cfg: DictConfig):
         device=device,
         depth_distribution=depth_distribution,
         depth_weight_threshold=depth_weight_threshold,
+        seed=seed,
     )
     
     print_results_table(results, baseline_name)

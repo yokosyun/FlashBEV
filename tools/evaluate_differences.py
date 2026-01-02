@@ -1,4 +1,3 @@
-
 # Copyright (c) Shunsuke Yokokawa. All rights reserved.
 
 import json
@@ -122,12 +121,8 @@ def evaluate_methods(
             )
             
             with torch.no_grad():
-                output = transformer(input=input_list)
-                if isinstance(output, tuple):
-                    bev_feat = output[0]
-                else:
-                    bev_feat = output
-            
+                bev_feat, _ = transformer(input=input_list)
+     
             if method_name == baseline_name:
                 baseline_output = bev_feat
                 results[method_name] = {

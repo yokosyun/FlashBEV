@@ -451,8 +451,8 @@ __global__ void flash_bevpool_grad_kernel(
   
   int batch_idx = bev_index / (grid_x * grid_y);
   int spatial_idx = bev_index % (grid_x * grid_y);
-  int y_idx = spatial_idx % grid_y;
-  int x_idx = spatial_idx / grid_y;
+  int x_idx = spatial_idx % grid_x;
+  int y_idx = spatial_idx / grid_x;
   
   if (batch_idx >= batch_size) return;
   
@@ -471,6 +471,105 @@ __global__ void flash_bevpool_grad_kernel(
   
   const int num_proj_params = 12;
   const int batch_proj_base = batch_idx * num_cameras * num_proj_params;
+  
+  float valid_count = 0.0f;
+  
+  for (int cam_idx = 0; cam_idx < num_cameras; cam_idx++) {
+    const int proj_camera_offset = cam_idx * num_proj_params;
+    
+    for (int z_idx = 0; z_idx < grid_z; z_idx++) {
+      float voxel_z = roi_range[4] + (z_idx + 0.5f) * voxel_size_z;
+      
+      float img_d = projection_matrices[batch_proj_base + proj_camera_offset + 8] * voxel_x + 
+                     projection_matrices[batch_proj_base + proj_camera_offset + 9] * voxel_y + 
+                     projection_matrices[batch_proj_base + proj_camera_offset + 10] * voxel_z + 
+                     projection_matrices[batch_proj_base + proj_camera_offset + 11];
+      
+      if (img_d <= 0.0f) {
+        continue;
+      }
+      
+      float img_u = projection_matrices[batch_proj_base + proj_camera_offset + 0] * voxel_x + 
+                    projection_matrices[batch_proj_base + proj_camera_offset + 1] * voxel_y + 
+                    projection_matrices[batch_proj_base + proj_camera_offset + 2] * voxel_z + 
+                    projection_matrices[batch_proj_base + proj_camera_offset + 3];
+      float img_v = projection_matrices[batch_proj_base + proj_camera_offset + 4] * voxel_x + 
+                    projection_matrices[batch_proj_base + proj_camera_offset + 5] * voxel_y + 
+                    projection_matrices[batch_proj_base + proj_camera_offset + 6] * voxel_z + 
+                    projection_matrices[batch_proj_base + proj_camera_offset + 7];
+      
+      float clamped_d = (img_d >= 0.0f) ? fmaxf(img_d, epsilon) : fminf(img_d, -epsilon);
+      img_u = img_u / clamped_d;
+      img_v = img_v / clamped_d;
+      
+      int image_height = image_size[0];
+      int image_width = image_size[1];
+      
+      int feat_h = feature_size[batch_idx * num_cameras * 2 + cam_idx * 2 + 0];
+      int feat_w = feature_size[batch_idx * num_cameras * 2 + cam_idx * 2 + 1];
+      
+      float feat_u = img_u / image_width * feat_w;
+      float feat_v = img_v / image_height * feat_h;
+      
+      if (feat_u < 0.0f || feat_u >= feat_w || feat_v < 0.0f || feat_v >= feat_h) {
+        continue;
+      }
+      
+      int batch_cam_idx = batch_idx * num_cameras + cam_idx;
+      int feat_hw = feat_h * feat_w;
+      int feat_c = num_channels;
+      
+      int u0 = static_cast<int>(floorf(feat_u));
+      int v0 = static_cast<int>(floorf(feat_v));
+      float du = feat_u - u0;
+      float dv = feat_v - v0;
+      u0 = max(0, min(u0, feat_w - 1));
+      int u1 = max(0, min(u0 + 1, feat_w - 1));
+      v0 = max(0, min(v0, feat_h - 1));
+      int v1 = max(0, min(v0 + 1, feat_h - 1));
+      
+      float w00 = (1.0f - du) * (1.0f - dv);
+      float w01 = (1.0f - du) * dv;
+      float w10 = du * (1.0f - dv);
+      float w11 = du * dv;
+      
+      int depth_base = batch_cam_idx * feat_hw * 2;
+      int depth_idx00 = depth_base + v0 * feat_w * 2 + u0 * 2;
+      int depth_idx01 = depth_base + v1 * feat_w * 2 + u0 * 2;
+      int depth_idx10 = depth_base + v0 * feat_w * 2 + u1 * 2;
+      int depth_idx11 = depth_base + v1 * feat_w * 2 + u1 * 2;
+      
+      float depth_mean = w00 * depth_params[depth_idx00] + 
+                         w01 * depth_params[depth_idx01] + 
+                         w10 * depth_params[depth_idx10] + 
+                         w11 * depth_params[depth_idx11];
+      float depth_sigma = w00 * depth_params[depth_idx00 + 1] + 
+                          w01 * depth_params[depth_idx01 + 1] + 
+                          w10 * depth_params[depth_idx10 + 1] + 
+                          w11 * depth_params[depth_idx11 + 1];
+      
+      float depth_weight = 0.0f;
+      if constexpr (DEPTH_DISTRIBUTION == 0) {
+        float z_score = (img_d - depth_mean) / (depth_sigma + epsilon);
+        depth_weight = expf(-0.5f * z_score * z_score) / (depth_sigma + epsilon);
+      } else {
+        float z_score = (img_d - depth_mean) / (depth_sigma + epsilon);
+        depth_weight = 0.5f * expf(-fabsf(z_score)) / (depth_sigma + epsilon);
+      }
+      
+      if (depth_weight < depth_weight_threshold) {
+        continue;
+      }
+      
+      valid_count += 1.0f;
+    }
+  }
+  
+  if (valid_count == 0.0f) {
+    return;
+  }
+  
+  float grad_out_normalized = grad_out / valid_count;
   
   for (int cam_idx = 0; cam_idx < num_cameras; cam_idx++) {
     const int proj_camera_offset = cam_idx * num_proj_params;
@@ -567,7 +666,7 @@ __global__ void flash_bevpool_grad_kernel(
       float feat_value = w00 * image_feats[idx00] + w01 * image_feats[idx01] + 
                          w10 * image_feats[idx10] + w11 * image_feats[idx11];
       
-      float weight = depth_weight * grad_out;
+      float weight = depth_weight * grad_out_normalized;
       
       atomicAdd(&depth_params_grad[depth_idx00], weight * feat_value * w00);
       atomicAdd(&depth_params_grad[depth_idx00 + 1], weight * feat_value * w00);

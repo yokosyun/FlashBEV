@@ -137,8 +137,6 @@ class SamplingVT(BaseModule):
             raise ValueError(f"depth_distribution must be 'laplace' or 'gaussian', got '{depth_distribution}'")
 
         self.context_network = nn.Conv2d(in_channels, self.out_channels, kernel_size=1, padding=0)
-        self.context_network.weight.data.fill_(1.0)
-        self.context_network.bias.data.fill_(1.0)
 
         self.register_buffer(
             name="depth_bins",
@@ -156,9 +154,6 @@ class SamplingVT(BaseModule):
                 nn.Conv2d(in_channels, self.num_depth_bins, kernel_size=1, padding=0),
                 nn.Softmax(dim=1)
             )
-        
-        self.depth_network[0].weight.data.fill_(1.0)
-        self.depth_network[0].bias.data.fill_(1.0)
 
         self.register_buffer(
             name="roi_ranges",

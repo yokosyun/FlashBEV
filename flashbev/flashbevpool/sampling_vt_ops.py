@@ -80,7 +80,7 @@ def sampling_vt_pillarpool(feat, ranks_feat, ranks_bev,
 def sampling_vt_pillarpool_fused(depth, feat, u_coords, v_coords, z_coords,
                 batch_camera_indices, ranks_bev, bev_feat_shape,
                 interval_starts, interval_lengths, batch_size, num_cameras,
-                feat_h, feat_w, epsilon=1e-6, depth_distribution=0):
+                feat_h, feat_w, epsilon=1e-6, depth_weight_threshold=0.0, depth_distribution=0):
     if not HAS_SAMPLING_VT_EXT:
         raise ImportError("sampling_vt_ext is required. Please rebuild the extension.")
     
@@ -99,7 +99,7 @@ def sampling_vt_pillarpool_fused(depth, feat, u_coords, v_coords, z_coords,
     sampling_vt_ext.sampling_vt_pillarpool_fused_forward(
         depth, feat, u_coords, v_coords, z_coords, batch_camera_indices,
         ranks_bev, interval_lengths, interval_starts, out,
-        batch_size, num_cameras, feat_h, feat_w, epsilon, depth_distribution
+        batch_size, num_cameras, feat_h, feat_w, epsilon, depth_weight_threshold, depth_distribution
     )
     
     x = out.movedim(-1, 1).contiguous()

@@ -345,9 +345,11 @@ class SamplingVT(BaseModule):
                     feat_h=feature_height,
                     feat_w=feature_width,
                     epsilon=1e-6,
+                    depth_weight_threshold=self.depth_weight_threshold,
                     depth_distribution=depth_distribution_int,
                 )
                 bev_feat = bev_feat.squeeze(-3)
+                bev_feat = bev_feat.permute(0, 3, 1, 2).contiguous()
 
             else:
                 image_uvd = image_uvd.flatten(0, 1)

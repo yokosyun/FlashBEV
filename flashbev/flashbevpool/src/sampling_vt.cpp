@@ -13,7 +13,7 @@ void sampling_vt_pillarpool_fused(int c, int n_intervals,
     const float* u_coords, const float* v_coords, const float* z_coords,
     const int* batch_camera_indices, const int* ranks_bev,
     const int* interval_starts, const int* interval_lengths,
-    int batch_size, int num_cameras, int feat_h, int feat_w, float epsilon, int depth_distribution, float* out);
+    int batch_size, int num_cameras, int feat_h, int feat_w, float epsilon, float depth_weight_threshold, int depth_distribution, float* out);
 
 void sampling_vt_pillarpool_forward(
   const at::Tensor _feat,
@@ -56,6 +56,7 @@ void sampling_vt_pillarpool_fused_forward(
   int feat_h,
   int feat_w,
   float epsilon,
+  float depth_weight_threshold,
   int depth_distribution
 ) {
   int c = _feat.size(-1);
@@ -76,7 +77,7 @@ void sampling_vt_pillarpool_fused_forward(
   sampling_vt_pillarpool_fused(
     c, n_intervals, depth, feat, u_coords, v_coords, z_coords,
     batch_camera_indices, ranks_bev, interval_starts, interval_lengths,
-    batch_size, num_cameras, feat_h, feat_w, epsilon, depth_distribution, out
+    batch_size, num_cameras, feat_h, feat_w, epsilon, depth_weight_threshold, depth_distribution, out
   );
 }
 

@@ -207,7 +207,7 @@ __global__ void flash_bevpool_kernel(
   int out_base = 
   (grid_y * grid_x * num_channels) * batch_idx +
   (grid_x * num_channels) * y_idx +
-  num_channels * x_idx;
+  (num_channels) * x_idx;
 
   if (valid_count > 0) {
     out[out_base + channel_index] = accumulator / valid_count;

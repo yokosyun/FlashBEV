@@ -105,6 +105,7 @@ __global__ void sampling_vt_pillarpool_fused_kernel(int c, int n_intervals,
   int feat_h,
   int feat_w,
   float epsilon,
+  float depth_weight_threshold,
   float* __restrict__ out) 
   {
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
@@ -182,6 +183,10 @@ __global__ void sampling_vt_pillarpool_fused_kernel(int c, int n_intervals,
         depth_weight = 0.5f * expf(-fabsf(z_score)) / (depth_sigma + epsilon);
       }
 
+      if (depth_weight < depth_weight_threshold) {
+        continue;
+      }
+
       accumulator += depth_weight * feature_value;
       valid_count += 1;
     }
@@ -200,18 +205,18 @@ void sampling_vt_pillarpool_fused(int c, int n_intervals,
     const float* u_coords, const float* v_coords, const float* z_coords,
     const int* batch_camera_indices, const int* ranks_bev,
     const int* interval_starts, const int* interval_lengths,
-    int batch_size, int num_cameras, int feat_h, int feat_w, float epsilon, int depth_distribution, float* out) {
+    int batch_size, int num_cameras, int feat_h, int feat_w, float epsilon, float depth_weight_threshold, int depth_distribution, float* out) {
   if (depth_distribution == 1) {
     sampling_vt_pillarpool_fused_kernel<1><<<(int)ceil(((double)n_intervals * c / 256)), 256>>>(
       c, n_intervals, depth, feat, u_coords, v_coords, z_coords,
       batch_camera_indices, ranks_bev, interval_starts, interval_lengths,
-      batch_size, num_cameras, feat_h, feat_w, epsilon, out
+      batch_size, num_cameras, feat_h, feat_w, epsilon, depth_weight_threshold, out
     );
   } else {
     sampling_vt_pillarpool_fused_kernel<0><<<(int)ceil(((double)n_intervals * c / 256)), 256>>>(
       c, n_intervals, depth, feat, u_coords, v_coords, z_coords,
       batch_camera_indices, ranks_bev, interval_starts, interval_lengths,
-      batch_size, num_cameras, feat_h, feat_w, epsilon, out
+      batch_size, num_cameras, feat_h, feat_w, epsilon, depth_weight_threshold, out
     );
   }
 }

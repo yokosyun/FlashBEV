@@ -20,7 +20,7 @@ seed: 42  # Random seed for reproducibility
 
 # Experiment configuration
 # Specify one of: num_height_bins, num_cameras_list, or depth_weight_threshold_list
-num_height_bins: null  # e.g., [8, 10, 16, 20, 40] or null for default
+num_height_bins: 16  # e.g., [8, 10, 16, 20, 40] or null for default
 num_cameras_list: null  # e.g., [1, 2, 3, 4, 5, 6] or null
 depth_weight_threshold_list: null  # e.g., [1e-6, 1e-5, 1e-4, 1e-3] or null
 

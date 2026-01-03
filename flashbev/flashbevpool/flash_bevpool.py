@@ -41,7 +41,7 @@ class FlashBEVPool(torch.autograd.Function):
             depth_weight_threshold: Threshold for depth weight filtering
             
         Returns:
-            BEV features [B,X,Y,C]
+            BEV features [B,Y,X,C]
         """
   
         depth_params = depth_params.contiguous().float()
@@ -66,7 +66,7 @@ class FlashBEVPool(torch.autograd.Function):
         voxel_y_min = roi_range[2].item()
         voxel_z_min = roi_range[4].item()
         
-        out = image_feats.new_zeros((batch_size, grid_size[0], grid_size[1], num_channels))
+        out = image_feats.new_zeros((batch_size, grid_size[1], grid_size[0], num_channels))
         
         total_threads = out.numel()
         flashbevpool_ext.flash_bevpool_forward(

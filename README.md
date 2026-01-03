@@ -39,3 +39,5 @@ uv run python tools/benchmark.py
 ```bash
 # With calibration file and height bins
 uv run python tools/benchmark.py load_calib=inputs/calib_nuscenes.json num_height_bins=[8,12,16,20,24,28,32]
+
+python tools/evaluate_differences.py load_calib=inputs/calib_nuscenes.json

@@ -362,7 +362,7 @@ def main(cfg: DictConfig):
     z_min = cfg.z_min
     z_max = cfg.z_max
     z_range = z_max - z_min
-    num_height_bins = cfg.num_height_bins if cfg.num_height_bins is not None else 10
+    num_height_bins = cfg.num_height_bins
     z_resolution = z_range / float(num_height_bins)
     sample_grid_z = (z_min, z_max, z_resolution)
     

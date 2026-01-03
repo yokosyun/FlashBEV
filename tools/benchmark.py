@@ -153,7 +153,6 @@ def run_single_benchmark(
                             fuse_projection=method_config["fuse_projection"],
                             use_bev_pool=method_config["use_bev_pool"],
                             use_shared_memory=method_config.get("use_shared_memory", False),
-                            use_bilinear=method_config["use_bilinear"],
                             fuse_bilinear=method_config.get("fuse_bilinear"),
                 device=cfg.device,
                 depth_distribution=method_config.get("depth_distribution", cfg.depth_distribution),

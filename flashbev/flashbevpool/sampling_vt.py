@@ -42,7 +42,6 @@ class SamplingVT(BaseModule):
         fuse_projection=True,
         use_bev_pool=True,
         use_shared_memory=False,
-        use_bilinear=True,
         fuse_bilinear=False,
         sample_grid_z=[-5.0, 3.0, 0.2],
         depth_distribution="laplace",
@@ -60,7 +59,6 @@ class SamplingVT(BaseModule):
         self.image_size = input_size
         self.depth_range = grid_config['depth'][:2]
 
-        self.use_bilinear = use_bilinear
         self.use_shared_memory = use_shared_memory
         self.fuse_projection = fuse_projection
         self.fuse_bilinear = fuse_bilinear

@@ -221,7 +221,6 @@ def evaluate_methods(
                 fuse_projection=method_config.get("fuse_projection", False),
                 use_bev_pool=method_config.get("use_bev_pool", False),
                 use_shared_memory=method_config.get("use_shared_memory", False),
-                use_bilinear=method_config.get("use_bilinear", True),
                 fuse_bilinear=method_config.get("fuse_bilinear", False),
                 device=device,
                 depth_distribution=method_config.get("depth_distribution", depth_distribution),

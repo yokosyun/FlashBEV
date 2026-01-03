@@ -152,11 +152,6 @@ class SamplingVT(BaseModule):
             tensor=torch.as_tensor(
                 [grid_config["x"][:2], grid_config["y"][:2], grid_config["z"][:2]]),
         )
-        self.register_buffer(
-            name="output_grid_size",
-            tensor=torch.tensor([(cfg[1] - cfg[0]) / cfg[2]
-                                    for cfg in [grid_config["x"], grid_config["y"], grid_config["z"]]], dtype=torch.int32),
-        )
 
         self.register_buffer(
             name="sample_grid_size",
@@ -258,12 +253,12 @@ class SamplingVT(BaseModule):
                 feature_size=feature_size,
                 image_size=image_size,
                 roi_range=self.roi_ranges.flatten(),
-                grid_size=self.output_grid_size,
+                grid_size=self.sample_grid_size,
                 epsilon=1e-6,
                 depth_weight_threshold=self.depth_weight_threshold,
             )
             
-            bev_feat = bev_feat.permute(0, 3, 1, 2).contiguous()
+            bev_feat = bev_feat.movedim(-1, 1).contiguous()
         else:        
             if self.VISUALIZE_LIDAR:
                 coords_3d = lidar_cloud.view(1, 1, *lidar_cloud.shape)[..., :3]
@@ -342,7 +337,7 @@ class SamplingVT(BaseModule):
                     z_coords=image_d[sorted_indices],
                     batch_camera_indices=camera_indices_sorted,
                     ranks_bev=voxel_indices,
-                    bev_feat_shape=(B, 1, self.output_grid_size[1], self.output_grid_size[0], OUT_CHANNELS),
+                    bev_feat_shape=(B, 1, self.sample_grid_size[1], self.sample_grid_size[0], OUT_CHANNELS),
                     interval_starts=interval_starts,
                     interval_lengths=interval_lengths,
                     batch_size=B,

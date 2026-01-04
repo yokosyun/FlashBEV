@@ -61,7 +61,7 @@ def determine_experiment_type(cfg: DictConfig):
         has_height_bins_exp = True
     elif has_height_bins_exp:
         num_height_bins_list = _to_list(cfg.num_height_bins)
-        else:
+    else:
         num_height_bins_list = [10]
     
     depth_weight_threshold_list = _to_list(cfg.depth_weight_threshold_list) if has_depth_threshold_exp else [cfg.depth_weight_threshold]
@@ -100,94 +100,91 @@ def run_single_benchmark(
     is_kernel_only: bool,
 ):
     """Run a single benchmark for a method."""
-                method_name = method_config["name"]
-                    is_flashbev = method_config["fuse_projection"] and not method_config.get("use_bev_pool", False)
+    method_name = method_config["name"]
+    is_flashbev = method_config["fuse_projection"] and not method_config.get("use_bev_pool", False)
                     
     try:
         if is_flashbev and is_kernel_only:
-                        data = create_flashbevpool_data(
+            data = create_flashbevpool_data(
                 batch_size=cfg.batch_size,
                 num_cameras=num_cams,
                 in_channels=cfg.in_channels,
                 feature_h=cfg.feature_h,
                 feature_w=cfg.feature_w,
-                            grid_x=grid_x,
-                            grid_y=grid_y,
+                grid_x=grid_x,
+                grid_y=grid_y,
                 grid_z=num_bins,
-                            roi_range=roi_range,
+                roi_range=roi_range,
                 device=cfg.device,
-                            calib_params=calib_params,
-                        )
+                calib_params=calib_params,
+            )
                         
-                        stats = benchmark_flashbevpool_kernel(
-                            data=data,
-                            depth_distribution=depth_distribution_int,
-                            use_shared_memory=method_config.get("use_shared_memory", False),
-                            optimize_z_precompute=method_config.get("optimize_z_precompute", True),
-                            use_warp_kernel=method_config.get("use_warp_kernel", False),
-                            use_vectorized_load=method_config.get("use_vectorized_load", False),
-                            epsilon=1e-6,
-                            depth_weight_threshold=depth_threshold,
+            stats = benchmark_flashbevpool_kernel(
+                data=data,
+                depth_distribution=depth_distribution_int,
+                use_shared_memory=method_config.get("use_shared_memory", False),
+                optimize_z_precompute=method_config.get("optimize_z_precompute", True),
+                use_warp_kernel=method_config.get("use_warp_kernel", False),
+                use_vectorized_load=method_config.get("use_vectorized_load", False),
+                epsilon=1e-6,
+                depth_weight_threshold=depth_threshold,
                 num_warmup=cfg.num_warmup,
                 num_iterations=cfg.num_iterations,
-                        )
-                    else:
-                        if input_list is None:
-                            input_list, _ = create_dummy_input(
+            )
+        else:
+            if input_list is None:
+                input_list, _ = create_dummy_input(
                     batch_size=cfg.batch_size,
                     num_cameras=num_cams,
                     in_channels=cfg.in_channels,
                     feature_h=cfg.feature_h,
                     feature_w=cfg.feature_w,
                     device=cfg.device,
-                                calib_params=calib_params,
-                            )
-                        
-                        transformer = create_view_transformer(
-                            grid_config=grid_config,
+                    calib_params=calib_params,
+                )
+            
+            transformer = create_view_transformer(
+                grid_config=grid_config,
                 sample_grid_z=sample_grid_z or [cfg.z_min, cfg.z_max, z_res],
-                            input_size=input_size,
+                input_size=input_size,
                 in_channels=cfg.in_channels,
                 out_channels=cfg.out_channels,
                 downsample=cfg.downsample,
-                            fuse_projection=method_config["fuse_projection"],
-                            use_bev_pool=method_config["use_bev_pool"],
-                            use_shared_memory=method_config.get("use_shared_memory", False),
-                            fuse_bilinear=method_config.get("fuse_bilinear"),
+                fuse_projection=method_config["fuse_projection"],
+                use_bev_pool=method_config["use_bev_pool"],
+                use_shared_memory=method_config.get("use_shared_memory", False),
+                fuse_bilinear=method_config.get("fuse_bilinear"),
                 device=cfg.device,
                 depth_distribution=method_config.get("depth_distribution", cfg.depth_distribution),
-                            optimize_z_precompute=method_config.get("optimize_z_precompute", True),
-                            use_warp_kernel=method_config.get("use_warp_kernel", False),
-                            use_vectorized_load=method_config.get("use_vectorized_load", False),
-                            depth_weight_threshold=depth_threshold,
-                        )
-                        
-                        stats = benchmark_method(
-                            transformer=transformer,
-                            input_list=input_list,
+                optimize_z_precompute=method_config.get("optimize_z_precompute", True),
+                use_warp_kernel=method_config.get("use_warp_kernel", False),
+                use_vectorized_load=method_config.get("use_vectorized_load", False),
+                depth_weight_threshold=depth_threshold,
+            )
+            
+            stats = benchmark_method(
+                transformer=transformer,
+                input_list=input_list,
                 num_warmup=cfg.num_warmup,
                 num_iterations=cfg.num_iterations,
             )
                     
-                    print(f"  ✓ Latency: {stats['latency_mean_ms']:.2f} ± {stats['latency_std_ms']:.2f} ms")
-                    print(f"  ✓ Peak Memory (allocated): {stats['peak_memory_allocated_mb']:.2f} MB")
-                    print(f"  ✓ Peak Memory (reserved): {stats['peak_memory_reserved_mb']:.2f} MB")
-                    
+            print(f"  ✓ Latency: {stats['latency_mean_ms']:.2f} ± {stats['latency_std_ms']:.2f} ms")
+            print(f"  ✓ Peak Memory (allocated): {stats['peak_memory_allocated_mb']:.2f} MB")
+            print(f"  ✓ Peak Memory (reserved): {stats['peak_memory_reserved_mb']:.2f} MB")
+            
         return {
-                        "method": method_name,
-                        "num_height_bins": num_bins,
+            "method": method_name,
+            "num_height_bins": num_bins,
             "num_cameras": num_cams,
-                        "z_resolution": z_res,
+            "z_resolution": z_res,
             "depth_weight_threshold": depth_threshold,
-                        **method_config,
-                        **stats,
-                    }
-                except Exception as e:
-                    print(f"  ✗ Error: {e}")
-                    import traceback
-        if "CUDA error" in str(e):
-            print("  Note: This may be a kernel-specific issue. Try running with different parameters.")
-                    traceback.print_exc()
+            **method_config,
+            **stats,
+        }
+
+    except Exception as e:
+        print(f"Error running benchmark for {method_name}: {e}")
         return None
 
 
@@ -245,80 +242,80 @@ def run_experiment(
             depth_threshold = exp_config["depth_weight_threshold_list"][0]
         
             print(f"\n{'='*80}")
-        print(f"Testing {value_key}: {value}")
+            print(f"Testing {value_key}: {value}")
             print(f"{'='*80}\n")
             
         sample_grid_z = [cfg.z_min, cfg.z_max, z_res]
-            input_list = None
+        input_list = None
         
         if not cfg.kernel_only and any(not (m["fuse_projection"] and not m.get("use_bev_pool", False)) for m in methods):
-                input_list, _ = create_dummy_input(
+            input_list, _ = create_dummy_input(
                 batch_size=cfg.batch_size,
-                    num_cameras=num_cams,
+                num_cameras=num_cams,
                 in_channels=cfg.in_channels,
                 feature_h=cfg.feature_h,
                 feature_w=cfg.feature_w,
                 device=cfg.device,
-                    calib_params=calib_params,
-                )
+                calib_params=calib_params,
+            )
             
             for method_config in methods:
                 method_name = method_config["name"]
-            num_runs = cfg.get("num_runs", 1)
+                num_runs = cfg.get("num_runs", 1)
+                        
+                if num_runs > 1:
+                    print(f"Benchmarking {method_name} ({value_key}={value}) - {num_runs} independent runs...")
+                    run_results = []
                     
-            if num_runs > 1:
-                print(f"Benchmarking {method_name} ({value_key}={value}) - {num_runs} independent runs...")
-                run_results = []
-                
-                for run_idx in range(num_runs):
-                    print(f"  Run {run_idx + 1}/{num_runs}...", end=" ", flush=True)
-                    result = run_single_benchmark(
-                        method_config, cfg, grid_config, grid_x, grid_y, roi_range,
-                        input_size, calib_params, num_bins, z_res, num_cams,
-                        depth_threshold, depth_distribution_int, input_list, sample_grid_z,
-                        cfg.kernel_only,
-                    )
+                    for run_idx in range(num_runs):
+                        print(f"  Run {run_idx + 1}/{num_runs}...", end=" ", flush=True)
+                        result = run_single_benchmark(
+                            method_config, cfg, grid_config, grid_x, grid_y, roi_range,
+                            input_size, calib_params, num_bins, z_res, num_cams,
+                            depth_threshold, depth_distribution_int, input_list, sample_grid_z,
+                            cfg.kernel_only,
+                        )
+                        
+                        if result:
+                            result["run_id"] = run_idx
+                            run_results.append(result)
+                            print(f"✓ ({result['latency_mean_ms']:.2f} ms)")
                     
-                    if result:
-                        result["run_id"] = run_idx
-                        run_results.append(result)
-                        print(f"✓ ({result['latency_mean_ms']:.2f} ms)")
-                
-                if run_results:
-                    import numpy as np
-                    aggregated = {
-                        "method": method_name,
-                        "num_height_bins": num_bins,
-                        "num_cameras": num_cams,
-                        "z_resolution": z_res,
-                        "depth_weight_threshold": depth_threshold,
-                        **method_config,
-                        "latency_mean_ms": float(np.mean([r["latency_mean_ms"] for r in run_results])),
-                        "latency_std_ms": float(np.std([r["latency_mean_ms"] for r in run_results])),
-                        "latency_min_ms": float(np.min([r["latency_min_ms"] for r in run_results])),
-                        "latency_max_ms": float(np.max([r["latency_max_ms"] for r in run_results])),
-                        "latency_p50_ms": float(np.mean([r["latency_p50_ms"] for r in run_results])),
-                        "latency_p95_ms": float(np.mean([r["latency_p95_ms"] for r in run_results])),
-                        "latency_p99_ms": float(np.mean([r["latency_p99_ms"] for r in run_results])),
-                        "peak_memory_allocated_mb": float(np.mean([r["peak_memory_allocated_mb"] for r in run_results])),
-                        "peak_memory_reserved_mb": float(np.mean([r["peak_memory_reserved_mb"] for r in run_results])),
-                        "memory_std_mb": float(np.std([r["peak_memory_allocated_mb"] for r in run_results])),
-                        "num_runs": num_runs,
-                        "individual_runs": run_results,
-                    }
-                    
-                    all_results.append(aggregated)
-                    memory_data[method_name][exp_config["x_axis_label"]].append(value)
-                    memory_data[method_name]["memory_mb"].append(aggregated['peak_memory_allocated_mb'])
-                    memory_data[method_name]["latency_ms"].append(aggregated['latency_mean_ms'])
-                    
-                    if num_runs > 1:
-                        memory_data[method_name].setdefault("latency_std", []).append(aggregated['latency_std_ms'])
-                        memory_data[method_name].setdefault("memory_std", []).append(aggregated['memory_std_mb'])
-                        memory_data[method_name].setdefault("individual_runs", []).append(run_results)
-                    
-                    print(f"  → Aggregated: {aggregated['latency_mean_ms']:.2f} ± {aggregated['latency_std_ms']:.2f} ms")
-                    print(f"  → Memory: {aggregated['peak_memory_allocated_mb']:.2f} ± {aggregated['memory_std_mb']:.2f} MB")
+                    if run_results:
+                        import numpy as np
+                        aggregated = {
+                            "method": method_name,
+                            "num_height_bins": num_bins,
+                            "num_cameras": num_cams,
+                            "z_resolution": z_res,
+                            "depth_weight_threshold": depth_threshold,
+                            **method_config,
+                            "latency_mean_ms": float(np.mean([r["latency_mean_ms"] for r in run_results])),
+                            "latency_std_ms": float(np.std([r["latency_mean_ms"] for r in run_results])),
+                            "latency_min_ms": float(np.min([r["latency_min_ms"] for r in run_results])),
+                            "latency_max_ms": float(np.max([r["latency_max_ms"] for r in run_results])),
+                            "latency_p50_ms": float(np.mean([r["latency_p50_ms"] for r in run_results])),
+                            "latency_p95_ms": float(np.mean([r["latency_p95_ms"] for r in run_results])),
+                            "latency_p99_ms": float(np.mean([r["latency_p99_ms"] for r in run_results])),
+                            "peak_memory_allocated_mb": float(np.mean([r["peak_memory_allocated_mb"] for r in run_results])),
+                            "peak_memory_reserved_mb": float(np.mean([r["peak_memory_reserved_mb"] for r in run_results])),
+                            "memory_std_mb": float(np.std([r["peak_memory_allocated_mb"] for r in run_results])),
+                            "num_runs": num_runs,
+                            "individual_runs": run_results,
+                        }
+                        
+                        all_results.append(aggregated)
+                        memory_data[method_name][exp_config["x_axis_label"]].append(value)
+                        memory_data[method_name]["memory_mb"].append(aggregated['peak_memory_allocated_mb'])
+                        memory_data[method_name]["latency_ms"].append(aggregated['latency_mean_ms'])
+                        
+                        if num_runs > 1:
+                            memory_data[method_name].setdefault("latency_std", []).append(aggregated['latency_std_ms'])
+                            memory_data[method_name].setdefault("memory_std", []).append(aggregated['memory_std_mb'])
+                            memory_data[method_name].setdefault("individual_runs", []).append(run_results)
+                        
+                        print(f"  → Aggregated: {aggregated['latency_mean_ms']:.2f} ± {aggregated['latency_std_ms']:.2f} ms")
+                        print(f"  → Memory: {aggregated['peak_memory_allocated_mb']:.2f} ± {aggregated['memory_std_mb']:.2f} MB")
             else:
                 print(f"Benchmarking {method_name} ({value_key}={value})...")
                 
@@ -376,8 +373,8 @@ def print_summary(all_results, exp_config, x_axis_values):
         headers = ["Method", "Latency (ms)", "P95 (ms)", "P99 (ms)", 
                   "Peak Mem Alloc (MB)", "Peak Mem Resv (MB)"]
         
-            print(tabulate(table_data, headers=headers, tablefmt="grid"))
-        else:
+        print(tabulate(table_data, headers=headers, tablefmt="grid"))
+    else:
         print(f"Tested {len(x_axis_values)} values: {x_axis_values}")
         print(f"Total results: {len(all_results)}")
     print()
@@ -480,9 +477,9 @@ def main(cfg: DictConfig):
     
     depth_distribution_int = 1 if cfg.depth_distribution == "laplace" else 0
     
-        print("\n" + "=" * 80)
+    print("\n" + "=" * 80)
     print("Benchmarking View Transform Methods")
-        print("=" * 80)
+    print("=" * 80)
     print(f"Batch size: {cfg.batch_size}")
     print(f"Feature size: {cfg.feature_h} x {cfg.feature_w}")
     print(f"Input size: {cfg.input_h} x {cfg.input_w}")

@@ -23,7 +23,7 @@ uv sync
 uv sync --extra benchmark
 
 # Install the package itself (required after uv sync)
-cd flashbev && uv pip install -e .
+cd flashbev && uv pip install -e . && cd ..
 ```
 
 **Note:** `uv sync` only installs packages listed in `pyproject.toml`. The `flashbev` package must be installed separately as it contains CUDA extensions built via `setup.py`.

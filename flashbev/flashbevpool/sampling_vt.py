@@ -31,6 +31,81 @@ def create_projection_matrix(sensor2ego, ego2global, camera2imgs, post_rots, pos
     return projection_matrices
 
 
+def sampling_vt_pytorch(
+    image_uvd: torch.Tensor,
+    features_pv: torch.Tensor,
+    depths: torch.Tensor,
+    B: int,
+    N: int,
+    image_size: Tuple[int, int],
+    depth_weight_threshold: float,
+    depth_distribution: str,
+    epsilon: float = 1e-6,
+) -> torch.Tensor:
+    image_uvd = image_uvd.flatten(0, 1)
+    
+    image_height, image_width = image_size
+    feat_h, feat_w = features_pv.shape[-2:]
+
+    image_u = image_uvd[..., 0]
+    image_v = image_uvd[..., 1]
+    image_d = image_uvd[..., 2]
+    
+    feat_u = image_u / image_width * feat_w
+    feat_v = image_v / image_height * feat_h
+    
+    fov_masks = (
+        (feat_u >= 0) & (feat_u < feat_w) &
+        (feat_v >= 0) & (feat_v < feat_h) &
+        (image_d > 0.0)
+    )
+    
+    feat_u_normalized = feat_u / (feat_w - 1.0) * 2.0 - 1.0
+    feat_v_normalized = feat_v / (feat_h - 1.0) * 2.0 - 1.0
+    
+    coords_uv = torch.stack([feat_u_normalized, feat_v_normalized], dim=-1)
+
+    features_3d = torch.nn.functional.grid_sample(
+        input=features_pv,
+        grid=coords_uv.flatten(1,2),
+        mode="bilinear",
+        padding_mode="border",
+        align_corners=True,
+    )
+    features_3d = features_3d.unflatten(2, coords_uv.shape[1:3])
+
+    depths_3d = torch.nn.functional.grid_sample(
+        input=depths.movedim(-1,1),
+        grid=coords_uv.flatten(1,2),
+        mode="bilinear",
+        padding_mode="border",
+        align_corners=True,
+    )
+    depths_3d = depths_3d.unflatten(2, coords_uv.shape[1:3])
+
+    depth_mu = depths_3d[:, 0]
+    depth_sigma = depths_3d[:, 1]
+
+    z_score = (image_d - depth_mu) / (depth_sigma + epsilon)
+    
+    if depth_distribution.lower() == "laplace":
+        depth_prob_3d = 0.5 * torch.exp(-torch.abs(z_score)) / (depth_sigma + epsilon)
+    else:
+        depth_prob_3d = torch.exp(-0.5 * z_score * z_score) / (depth_sigma + epsilon)
+
+    valid_mask = depth_prob_3d >= depth_weight_threshold
+    valid_mask = valid_mask & fov_masks
+
+    features_3d = features_3d * depth_prob_3d.unsqueeze(1)
+    features_3d = features_3d * valid_mask.unsqueeze(1)
+    bev_feat = features_3d.unflatten(0, (B, N)).sum(dim=[1, -1])
+
+    valid_counts = valid_mask.unflatten(0, (B, N)).sum(dim=[1, -1])
+    bev_feat = bev_feat / torch.clamp(valid_counts, min=1.0).unsqueeze(1)
+    
+    return bev_feat
+
+
 class SamplingVT(BaseModule):
     def __init__(
         self,
@@ -191,63 +266,17 @@ class SamplingVT(BaseModule):
                 bev_feat = self._sampling_vt_pillarpool_fused(coords_3d, image_uvd, features_pv.unflatten(0, (B, N)), depths.unflatten(0, (B, N)))
 
             else:
-                image_uvd = image_uvd.flatten(0, 1)
-                
-                image_height, image_width = self.image_size
-                feat_h, feat_w = features_pv.shape[-2:]
-            
-                image_u = image_uvd[..., 0]
-                image_v = image_uvd[..., 1]
-                image_d = image_uvd[..., 2]
-                
-                feat_u = image_u / image_width * feat_w
-                feat_v = image_v / image_height * feat_h
-                
-                fov_masks = (
-                    (feat_u >= 0) & (feat_u < feat_w) &
-                    (feat_v >= 0) & (feat_v < feat_h) &
-                    (image_d > 0.0)
+                bev_feat = sampling_vt_pytorch(
+                    image_uvd=image_uvd,
+                    features_pv=features_pv,
+                    depths=depths,
+                    B=B,
+                    N=N,
+                    image_size=self.image_size,
+                    depth_weight_threshold=self.depth_weight_threshold,
+                    depth_distribution=self.depth_distribution,
+                    epsilon=1e-6,
                 )
-                
-                feat_u_normalized = feat_u / (feat_w - 1.0) * 2.0 - 1.0
-                feat_v_normalized = feat_v / (feat_h - 1.0) * 2.0 - 1.0
-                
-                coords_uv = torch.stack([feat_u_normalized, feat_v_normalized], dim=-1)
-
-                features_3d = torch.nn.functional.grid_sample(
-                    input=features_pv,
-                    grid=coords_uv.flatten(1,2),
-                    mode="bilinear",
-                    padding_mode="border",
-                    align_corners=True,
-                )
-                features_3d = features_3d.unflatten(2, coords_uv.shape[1:3])
-
-                depths_3d = torch.nn.functional.grid_sample(
-                    input=depths.movedim(-1,1),
-                    grid=coords_uv.flatten(1,2),
-                    mode="bilinear",
-                    padding_mode="border",
-                    align_corners=True,
-                )
-                depths_3d = depths_3d.unflatten(2, coords_uv.shape[1:3])
-
-                depth_mu = depths_3d[:, 0]
-                depth_sigma = depths_3d[:, 1]
-
-                epsilon = 1e-6
-                z_score = (image_d - depth_mu) / (depth_sigma + epsilon)
-                depth_prob_3d = self.compute_depth_weight(z_score, depth_sigma, epsilon)
-
-                valid_mask = depth_prob_3d >= self.depth_weight_threshold
-                valid_mask = valid_mask & fov_masks
-
-                features_3d = features_3d * depth_prob_3d.unsqueeze(1)
-                features_3d = features_3d * valid_mask.unsqueeze(1)
-                bev_feat = features_3d.unflatten(0, (B, N)).sum(dim=[1, -1])
-
-                valid_counts = valid_mask.unflatten(0, (B, N)).sum(dim=[1, -1])
-                bev_feat = bev_feat  / torch.clamp(valid_counts, min=1.0).unsqueeze(1)
 
         return bev_feat
 

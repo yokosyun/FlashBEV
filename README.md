@@ -23,7 +23,7 @@ uv sync
 uv sync --extra benchmark
 
 # Install the package itself (required after uv sync)
-cd flashbev && uv pip install -e .
+cd flashbev && uv pip install -e . && cd ..
 ```
 
 **Note:** `uv sync` only installs packages listed in `pyproject.toml`. The `flashbev` package must be installed separately as it contains CUDA extensions built via `setup.py`.
@@ -39,3 +39,5 @@ uv run python tools/benchmark.py
 ```bash
 # With calibration file and height bins
 uv run python tools/benchmark.py load_calib=inputs/calib_nuscenes.json num_height_bins=[8,12,16,20,24,28,32]
+
+uv run python tools/evaluate_differences.py load_calib=inputs/calib_nuscenes.json

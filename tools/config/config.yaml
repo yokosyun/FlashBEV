@@ -50,30 +50,15 @@ kernel_only: false  # Benchmark FlashBEVPool kernel only (no mmdet3d dependency)
 
 # Methods to benchmark
 methods:
-  # - name: "FlashBEV+warp_kernel"
-  #   fuse_projection: true
-  #   use_bev_pool: false
-  #   use_shared_memory: false
-  #   depth_regression: true
-  #   use_bilinear: true
-  #   optimize_z_precompute: false
-  #   use_warp_kernel: true
-  #   use_vectorized_load: false
   - name: "Sampling-VT"
     fuse_projection: false
     use_bev_pool: false
-    depth_regression: true
-    use_bilinear: true
   - name: "Sampling-VT+PillarPool"
     fuse_projection: false
     use_bev_pool: true
-    depth_regression: true
-    use_bilinear: true
     fuse_bilinear: true
   - name: "FlashBEV"
     fuse_projection: true
     use_bev_pool: false
     use_shared_memory: false
-    depth_regression: true
-    use_bilinear: true
     optimize_z_precompute: false

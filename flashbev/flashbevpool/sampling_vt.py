@@ -147,7 +147,6 @@ class SamplingVT(BaseModule):
 
     def sampling_vt(self, input, features_pv, depths):
         B, N, _, _ = input[3].shape
-        OUT_CHANNELS = features_pv.size(-3)
 
         projection_matrices = create_projection_matrix(*input[1:7])
 
@@ -189,66 +188,8 @@ class SamplingVT(BaseModule):
             )
 
             if self.use_bev_pool:
-                feature_size = features_pv.shape[-2:]
-                feature_height, feature_width = feature_size
-                (
-                    feature_u,
-                    feature_v,
-                    image_d,
-                    fov_masks,
-                ) = self._get_feature_masks(
-                    image_uvd=image_uvd,
-                    feature_size=feature_size,
-                )
+                bev_feat = self._sampling_vt_pillarpool_fused(coords_3d, image_uvd, features_pv.unflatten(0, (B, N)), depths.unflatten(0, (B, N)))
 
-                (
-                    voxel_indices,
-                    camera_indices,
-                    feature_u,
-                    feature_v,
-                    image_d,
-                ) = self._get_valid_indices(
-                    coords_3d,
-                    fov_masks,
-                    feature_u,
-                    feature_v,
-                    image_d,
-                )
-
-                (
-                    voxel_indices,
-                    interval_starts,
-                    interval_lengths,
-                    sorted_indices,
-                ) = self._get_bev_pool_indices(voxel_indices)
-
-                camera_indices_sorted = camera_indices[sorted_indices]
-                feature_v_sorted = feature_v[sorted_indices]
-                feature_u_sorted = feature_u[sorted_indices]
-
-                depth_mu = depths[..., 0]
-                depth_sigma = depths[..., 1]
-        
-                depth_distribution_int = 1 if self.depth_distribution == "laplace" else 0
-                bev_feat = sampling_vt_pillarpool_fused(
-                    depth=depths.unflatten(0, (B, N)),
-                    feat=features_pv.movedim(-3, -1).unflatten(0, (B, N)),
-                    u_coords=feature_u_sorted,
-                    v_coords=feature_v_sorted,
-                    z_coords=image_d[sorted_indices],
-                    batch_camera_indices=camera_indices_sorted,
-                    ranks_bev=voxel_indices,
-                    bev_feat_shape=(B, self.output_grid_size[0], self.output_grid_size[1], self.output_grid_size[2], OUT_CHANNELS),
-                    interval_starts=interval_starts,
-                    interval_lengths=interval_lengths,
-                    batch_size=B,
-                    num_cameras=N,
-                    feat_h=feature_height,
-                    feat_w=feature_width,
-                    epsilon=1e-6,
-                    depth_distribution=depth_distribution_int,
-                )
-                bev_feat = bev_feat.squeeze(-1)
             else:
                 image_uvd = image_uvd.flatten(0, 1)
                 
@@ -394,6 +335,74 @@ class SamplingVT(BaseModule):
 
         return coords_3d
 
+
+    def _sampling_vt_pillarpool_fused(
+        self,
+        coords_3d: torch.Tensor,
+        image_uvd: torch.Tensor,
+        features_pv: torch.Tensor,
+        depths: torch.Tensor,
+    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+        B, N, _, _, _ = features_pv.shape
+        feature_size = features_pv.shape[-2:]
+        feature_height, feature_width = feature_size
+        (
+            feature_u,
+            feature_v,
+            image_d,
+            fov_masks,
+        ) = self._get_feature_masks(
+            image_uvd=image_uvd,
+            feature_size=feature_size,
+        )
+
+        (
+            voxel_indices,
+            camera_indices,
+            feature_u,
+            feature_v,
+            image_d,
+        ) = self._get_valid_indices(
+            coords_3d,
+            fov_masks,
+            feature_u,
+            feature_v,
+            image_d,
+        )
+
+        (
+            voxel_indices,
+            interval_starts,
+            interval_lengths,
+            sorted_indices,
+        ) = self._get_bev_pool_indices(voxel_indices)
+
+        camera_indices_sorted = camera_indices[sorted_indices]
+        feature_v_sorted = feature_v[sorted_indices]
+        feature_u_sorted = feature_u[sorted_indices]
+
+        depth_distribution_int = 1 if self.depth_distribution == "laplace" else 0
+        bev_feat = sampling_vt_pillarpool_fused(
+            depth=depths,
+            feat=features_pv.movedim(-3, -1),
+            u_coords=feature_u_sorted,
+            v_coords=feature_v_sorted,
+            z_coords=image_d[sorted_indices],
+            batch_camera_indices=camera_indices_sorted,
+            ranks_bev=voxel_indices,
+            bev_feat_shape=(B, self.output_grid_size[0], self.output_grid_size[1], self.output_grid_size[2], features_pv.size(-3)),
+            interval_starts=interval_starts,
+            interval_lengths=interval_lengths,
+            batch_size=features_pv.shape[0],
+            num_cameras=N,
+            feat_h=feature_height,
+            feat_w=feature_width,
+            epsilon=1e-6,
+            depth_distribution=depth_distribution_int,
+        )
+        bev_feat = bev_feat.squeeze(-1)
+
+        return bev_feat
 
 def project_coords(
     coords_xyz: torch.Tensor,

@@ -53,15 +53,12 @@ methods:
   - name: "Sampling-VT"
     fuse_projection: false
     use_bev_pool: false
-    depth_regression: true
   - name: "Sampling-VT+PillarPool"
     fuse_projection: false
     use_bev_pool: true
-    depth_regression: true
     fuse_bilinear: true
   - name: "FlashBEV"
     fuse_projection: true
     use_bev_pool: false
     use_shared_memory: false
-    depth_regression: true
     optimize_z_precompute: false

@@ -102,6 +102,8 @@ def sampling_vt_pytorch(
 
     valid_counts = valid_mask.unflatten(0, (B, N)).sum(dim=[1, -1])
     bev_feat = bev_feat / torch.clamp(valid_counts, min=1.0).unsqueeze(1)
+
+    bev_feat = bev_feat.movedim(-1, -2)
     
     return bev_feat
 
@@ -264,7 +266,7 @@ class SamplingVT(BaseModule):
 
             if self.use_bev_pool:
                 bev_feat = self._sampling_vt_pillarpool_fused(coords_3d, image_uvd, features_pv.unflatten(0, (B, N)), depths.unflatten(0, (B, N)))
-
+                bev_feat = bev_feat.movedim(-1, -2)
             else:
                 bev_feat = sampling_vt_pytorch(
                     image_uvd=image_uvd,

@@ -74,7 +74,7 @@ void flash_bevpool_grad(
     voxel_x_min       : Minimum x coordinate
     voxel_y_min       : Minimum y coordinate
     voxel_z_min       : Minimum z coordinate
-    out               : Output BEV features [B,X,Y,C]
+    out               : Output BEV features [B,Y,X,C]
 */
 void flash_bevpool_forward(
   const at::Tensor _depth_params,

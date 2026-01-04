@@ -25,7 +25,7 @@ __global__ void flash_bevpool_kernel(
     float voxel_x_min, // voxel x min
     float voxel_y_min, // voxel y min
     float voxel_z_min, // voxel z min
-    float* __restrict__ out // [B,X,Y,C]
+    float* __restrict__ out // [B,Y,X,C]
   )
 {
   int thread_index = blockIdx.x * blockDim.x + threadIdx.x;
@@ -206,8 +206,8 @@ __global__ void flash_bevpool_kernel(
 
   int out_base = 
   (grid_x * grid_y * num_channels) * batch_idx +
-  (grid_y * num_channels) * x_idx +
-  num_channels * y_idx;
+  (grid_x * num_channels) * y_idx +
+  num_channels * x_idx;
 
   if (valid_count > 0) {
     out[out_base + channel_index] = accumulator / valid_count;
@@ -240,7 +240,7 @@ __global__ void flash_bevpool_warp_kernel(
     float voxel_x_min, // voxel x min
     float voxel_y_min, // voxel y min
     float voxel_z_min, // voxel z min
-    float* __restrict__ out // [B,X,Y,C]
+    float* __restrict__ out // [B,Y,X,C]
   )
 {
   int thread_index = blockIdx.x * blockDim.x + threadIdx.x;
@@ -409,8 +409,8 @@ __global__ void flash_bevpool_warp_kernel(
   
   int out_base = 
     (grid_x * grid_y * num_channels) * batch_idx +
-    (grid_y * num_channels) * x_idx +
-    num_channels * y_idx;
+    (grid_x * num_channels) * y_idx +
+    num_channels * x_idx;
 
   if (valid_count > 0) {
     for (int channel_index = 0; channel_index < num_channels; channel_index++) {

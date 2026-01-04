@@ -4,75 +4,6 @@
 #include <stdlib.h>
 #include <math.h>
 
-__global__ void sampling_vt_pillarpool_kernel(int c, int n_intervals,
-  const float *__restrict__ feat,
-  const int *__restrict__ ranks_feat,
-  const int *__restrict__ ranks_bev,
-  const int *__restrict__ interval_starts,
-  const int *__restrict__ interval_lengths,
-  float* __restrict__ out) {
-  int idx = blockIdx.x * blockDim.x + threadIdx.x;
-  int index = idx / c;
-  int cur_c = idx % c;
-  if (index >= n_intervals) return;
-  int interval_start = interval_starts[index];
-  int interval_length = interval_lengths[index];
-  float accumulator = 0;
-  const float* cur_feat;
-
-  for(int i = 0; i < interval_length; i++){
-    cur_feat = feat + (interval_start + i) * c + cur_c;
-    accumulator += (*cur_feat);
-  }
-
-  const int* cur_rank = ranks_bev + interval_start;
-  float* cur_out = out + *cur_rank * c + cur_c;
-  *cur_out = accumulator;
-}
-
-/*
-  Function: sampling VT pillar pooling (backward, cuda)
-  Args:
-    out_grad         : gradient of output bev feature, FloatTensor[b, c, h_out, w_out]
-    feat_grad        : gradient of input feature, FloatTensor[n, h, w, c]
-    feat             : input features, FloatTensor[n, h, w, c]
-    ranks_feat       : feat index of points, IntTensor[n_points]
-    ranks_bev        : output index of points, IntTensor[n_points]
-    interval_lengths : starting position for pooled point, IntTensor[n_intervals]
-    interval_starts  : how many points in each pooled point, IntTensor[n_intervals]
-  Backward equations:
-    Forward: out[rank_bev, c] = Σ_i feat[rank_feat[i], c]
-    ∂L/∂feat[rank_feat[i], c] = grad_out[rank_bev, c]
-*/
-__global__ void sampling_vt_pillarpool_grad_kernel(int c, int n_intervals,
-  const float *__restrict__ out_grad,
-  const float *__restrict__ depth,
-  const float *__restrict__ feat,
-  const int *__restrict__ ranks_feat,
-  const int *__restrict__ ranks_bev,
-  const int *__restrict__ interval_starts,
-  const int *__restrict__ interval_lengths,
-  float* __restrict__ depth_grad,
-  float* __restrict__ feat_grad) {
-  int idx = blockIdx.x * blockDim.x + threadIdx.x;
-  if (idx >= n_intervals) return;
-  int interval_start = interval_starts[idx];
-  int interval_length = interval_lengths[idx];
-
-  const int* cur_rank;
-  const float* cur_out_grad;
-  float* cur_feat_grad;
-
-  for(int cur_c = 0; cur_c < c; cur_c++){
-    for(int i = 0; i < interval_length; i++){
-      cur_rank = ranks_bev + interval_start + i;
-      cur_out_grad = out_grad + *cur_rank * c + cur_c;
-      cur_feat_grad = feat_grad + (interval_start + i) * c + cur_c;
-      atomicAdd(cur_feat_grad, *cur_out_grad);
-    }
-  }
-}
-
 /*
   Function: sampling VT pillar pooling (fused with bilinear sampling and depth weighting)
   Args:
@@ -214,21 +145,4 @@ void sampling_vt_pillarpool_fused(int c, int n_intervals,
       batch_size, num_cameras, feat_h, feat_w, epsilon, out
     );
   }
-}
-
-void sampling_vt_pillarpool(int c, int n_intervals, const float* feat,
-  const int* ranks_feat, const int* ranks_bev,
-  const int* interval_starts, const int* interval_lengths, float* out) {
-  sampling_vt_pillarpool_kernel<<<(int)ceil(((double)n_intervals * c / 256)), 256>>>(
-    c, n_intervals, feat, ranks_feat, ranks_bev, interval_starts, interval_lengths, out
-  );
-}
-
-void sampling_vt_pillarpool_grad(int c, int n_intervals, const float* out_grad,
-  const float* depth, const float* feat, const int* ranks_feat,
-  const int* ranks_bev, const int* interval_starts, const int* interval_lengths, float* depth_grad, float* feat_grad) {
-  sampling_vt_pillarpool_grad_kernel<<<(int)ceil(((double)n_intervals / 256)), 256>>>(
-     c, n_intervals, out_grad, depth, feat, ranks_feat,
-     ranks_bev, interval_starts, interval_lengths, depth_grad, feat_grad
-  );
 }

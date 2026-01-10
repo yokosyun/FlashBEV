@@ -32,7 +32,7 @@ depth_weight_threshold: 0.0
 grid_config:
   x: [-50.0, 50.0, 0.25]
   y: [-50.0, 50.0, 0.25]
-  z: [-4.0, 2.0, 1.0]
+  z: [-4.0, 2.0, 0.5]
   depth: [1.0, 60.0, 1.0]
 
 # Input/Output paths

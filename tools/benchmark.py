@@ -242,6 +242,9 @@ def run_experiment(
             z_res = exp_config["z_resolutions"][0]
             depth_threshold = exp_config["depth_weight_threshold_list"][0]
         
+        current_grid_config = {k: list(v) if isinstance(v, list) else v for k, v in grid_config.items()}
+        current_grid_config["z"][2] = z_res
+        
         print(f"\n{'='*80}")
         print(f"Testing {value_key}: {value}")
         print(f"{'='*80}\n")
@@ -270,7 +273,7 @@ def run_experiment(
                 for run_idx in range(num_runs):
                     print(f"  Run {run_idx + 1}/{num_runs}...", end=" ", flush=True)
                     result = run_single_benchmark(
-                        method_config, cfg, grid_config, grid_x, grid_y, roi_range,
+                        method_config, cfg, current_grid_config, grid_x, grid_y, roi_range,
                         input_size, calib_params, num_bins, z_res, num_cams,
                         depth_threshold, depth_distribution_int, input_list,
                         cfg.kernel_only,
@@ -320,7 +323,7 @@ def run_experiment(
                 print(f"Benchmarking {method_name} ({value_key}={value})...")
                 
                 result = run_single_benchmark(
-                    method_config, cfg, grid_config, grid_x, grid_y, roi_range,
+                    method_config, cfg, current_grid_config, grid_x, grid_y, roi_range,
                     input_size, calib_params, num_bins, z_res, num_cams,
                     depth_threshold, depth_distribution_int, input_list,
                     cfg.kernel_only,

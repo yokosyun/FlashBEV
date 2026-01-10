@@ -467,6 +467,15 @@ def main(cfg: DictConfig):
     exp_type = "height_bins" if exp_config["has_height_bins_exp"] else ("depth_threshold" if exp_config["has_depth_threshold_exp"] else "cameras")
     exp_config.update(exp_type_configs[exp_type])
     
+    grid_x = int((float(grid_config["x"][1]) - float(grid_config["x"][0])) / float(grid_config["x"][2]))
+    grid_y = int((float(grid_config["y"][1]) - float(grid_config["y"][0])) / float(grid_config["y"][2]))
+    if grid_x == grid_y:
+        grid_resolution_suffix = f" (X=Y={grid_x})"
+    else:
+        grid_resolution_suffix = f" (X={grid_x}, Y={grid_y})"
+    exp_config["plot_title"] += grid_resolution_suffix
+    exp_config["latency_plot_title"] += grid_resolution_suffix
+    
     methods = [m for m in cfg.methods if m["fuse_projection"] and not m.get("use_bev_pool", False) and not m.get("use_warp_kernel", False)] if cfg.kernel_only else cfg.methods
     
     if cfg.kernel_only:

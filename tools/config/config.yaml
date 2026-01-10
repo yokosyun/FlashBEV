@@ -46,14 +46,14 @@ kernel_only: false  # Benchmark FlashBEVPool kernel only (no mmdet3d dependency)
 
 # Methods to benchmark
 methods:
-  - name: "Sampling-VT"
+  - name: "Dense PyTorch Sampling-VT"
     fuse_projection: false
     use_bev_pool: false
-  - name: "Sampling-VT+PillarPool"
-    fuse_projection: false
-    use_bev_pool: true
-    fuse_bilinear: true
-  - name: "FlashBEV"
+  # - name: "Sampling-VT+PillarPool"
+  #   fuse_projection: false
+  #   use_bev_pool: true
+  #   fuse_bilinear: true
+  - name: "FlashBEV(ours)"
     fuse_projection: true
     use_bev_pool: false
     use_shared_memory: false

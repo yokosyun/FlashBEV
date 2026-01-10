@@ -5,7 +5,6 @@ from flashbevpool import SamplingVT
 
 def create_view_transformer(
     grid_config: Dict,
-    sample_grid_z: Tuple[float, float, float],
     input_size: Tuple[int, int],
     in_channels: int,
     out_channels: int,
@@ -32,7 +31,6 @@ def create_view_transformer(
         use_bev_pool=use_bev_pool,
         use_shared_memory=use_shared_memory,
         fuse_bilinear=fuse_bilinear,
-        sample_grid_z=sample_grid_z,
         depth_distribution=depth_distribution,
         optimize_z_precompute=optimize_z_precompute,
         use_warp_kernel=use_warp_kernel,

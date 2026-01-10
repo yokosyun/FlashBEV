@@ -120,7 +120,6 @@ class SamplingVT(BaseModule):
         use_bev_pool=True,
         use_shared_memory=False,
         fuse_bilinear=False,
-        sample_grid_z=[-5.0, 3.0, 0.2],
         depth_distribution="laplace",
         optimize_z_precompute=True,
         use_warp_kernel=False,
@@ -167,19 +166,20 @@ class SamplingVT(BaseModule):
         )
         self.register_buffer(
             name="output_grid_size",
-            tensor=torch.tensor([(cfg[1] - cfg[0]) / cfg[2]
-                                    for cfg in [grid_config["x"], grid_config["y"], grid_config["z"]]], dtype=torch.int32),
+            tensor=torch.tensor([(grid_config["x"][1] - grid_config["x"][0]) / grid_config["x"][2],
+                                (grid_config["y"][1] - grid_config["y"][0]) / grid_config["y"][2],
+                                1], dtype=torch.int32),
         )
 
         self.register_buffer(
             name="sample_grid_size",
             tensor=torch.tensor([(cfg[1] - cfg[0]) / cfg[2]
-                                    for cfg in [grid_config["x"], grid_config["y"], sample_grid_z]], dtype=torch.int32),
+                                    for cfg in [grid_config["x"], grid_config["y"], grid_config["z"]]], dtype=torch.int32),
         )
         if self.fuse_projection == False:
             self.register_buffer(
                 name="voxel_size",
-                tensor=torch.as_tensor([grid_config["x"][2], grid_config["y"][2], sample_grid_z[2]]),
+                tensor=torch.as_tensor([grid_config["x"][2], grid_config["y"][2], grid_config["z"][2]]),
             )
             coords_3d = self._calculate_coords_3d(device="cpu")
             self.register_buffer(

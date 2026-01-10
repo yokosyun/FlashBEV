@@ -178,7 +178,6 @@ def evaluate_methods(
     methods: List[Dict],
     input_list: List[torch.Tensor],
     grid_config: Dict,
-    sample_grid_z: Tuple[float, float, float],
     input_size: Tuple[int, int],
     in_channels: int,
     out_channels: int,
@@ -213,7 +212,6 @@ def evaluate_methods(
             set_seed(seed)
             transformer = create_view_transformer(
                 grid_config=grid_config,
-                sample_grid_z=sample_grid_z,
                 input_size=input_size,
                 in_channels=in_channels,
                 out_channels=out_channels,
@@ -357,12 +355,6 @@ def main(cfg: DictConfig):
     out_channels = cfg.out_channels
     
     grid_config = OmegaConf.to_container(cfg.grid_config, resolve=True)
-    z_min = cfg.z_min
-    z_max = cfg.z_max
-    z_range = z_max - z_min
-    num_height_bins = cfg.num_height_bins if cfg.num_height_bins is not None else 10
-    z_resolution = z_range / float(num_height_bins)
-    sample_grid_z = (z_min, z_max, z_resolution)
     
     depth_distribution = cfg.depth_distribution
     depth_weight_threshold = cfg.depth_weight_threshold
@@ -390,7 +382,6 @@ def main(cfg: DictConfig):
         methods=methods,
         input_list=input_list,
         grid_config=grid_config,
-        sample_grid_z=sample_grid_z,
         input_size=input_size,
         in_channels=in_channels,
         out_channels=out_channels,

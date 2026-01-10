@@ -101,9 +101,10 @@ def plot_memory_vs_x(
     
     plt.xlabel(xlabel, fontsize=12)
     plt.ylabel("Peak Memory Allocated (GB)", fontsize=12)
+    plt.yscale('log')
     plt.title(plot_title, fontsize=14, fontweight='bold')
     plt.legend(loc='best', fontsize=10)
-    plt.grid(True, alpha=0.3)
+    plt.grid(True, alpha=0.3, which='both')
     plt.tight_layout()
     plt.savefig(plot_output, dpi=300, bbox_inches='tight')
     print(f"  ✓ Saved plot to {plot_output}")

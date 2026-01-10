@@ -45,13 +45,15 @@ def plot_memory_vs_x(
     for idx, (method_name, data) in enumerate(memory_data.items()):
         if len(data[x_axis_label]) > 0:
             x_values = data[x_axis_label]
-            memory = data["memory_mb"]
-            sorted_pairs = sorted(zip(x_values, memory))
+            memory_mb = data["memory_mb"]
+            memory_gb = [mb / 1024.0 for mb in memory_mb]
+            sorted_pairs = sorted(zip(x_values, memory_gb))
             x_sorted, memory_sorted = zip(*sorted_pairs)
             
             if has_multiple_runs and "memory_std" in data and len(data["memory_std"]) > 0:
-                memory_std = data["memory_std"]
-                sorted_std_pairs = sorted(zip(x_values, memory_std))
+                memory_std_mb = data["memory_std"]
+                memory_std_gb = [mb / 1024.0 for mb in memory_std_mb]
+                sorted_std_pairs = sorted(zip(x_values, memory_std_gb))
                 _, memory_std_sorted = zip(*sorted_std_pairs)
                 
                 plt.errorbar(
@@ -69,9 +71,10 @@ def plot_memory_vs_x(
                 if "individual_runs" in data and len(data["individual_runs"]) == len(x_values):
                     for x_val_idx, x_val in enumerate(x_sorted):
                         if x_val_idx < len(data["individual_runs"]) and data["individual_runs"][x_val_idx]:
-                            run_memory = [r["peak_memory_allocated_mb"] for r in data["individual_runs"][x_val_idx]]
+                            run_memory_mb = [r["peak_memory_allocated_mb"] for r in data["individual_runs"][x_val_idx]]
+                            run_memory_gb = [mb / 1024.0 for mb in run_memory_mb]
                             plt.scatter(
-                                [x_val] * len(run_memory), run_memory,
+                                [x_val] * len(run_memory_gb), run_memory_gb,
                                 alpha=0.3,
                                 s=20,
                                 color=colors[idx % len(colors)],
@@ -97,7 +100,7 @@ def plot_memory_vs_x(
         xlabel = "Num Cameras"
     
     plt.xlabel(xlabel, fontsize=12)
-    plt.ylabel("Peak Memory Allocated (MB)", fontsize=12)
+    plt.ylabel("Peak Memory Allocated (GB)", fontsize=12)
     plt.title(plot_title, fontsize=14, fontweight='bold')
     plt.legend(loc='best', fontsize=10)
     plt.grid(True, alpha=0.3)

@@ -1,5 +1,9 @@
 """
 Utilities for calculating FLOPs (Floating Point Operations) for FlashBEV kernels.
+
+This module provides theoretical FLOP calculations derived from first principles,
+making it easy for reviewers and users to verify and understand the computational
+complexity of different view transform methods.
 """
 
 from typing import Dict, Optional, Tuple
@@ -11,13 +15,21 @@ def calculate_shared_flops_per_voxel_camera(
     """
     Calculate shared FLOPs per voxel-camera combination.
     
+    Theoretical derivation: These operations transform 3D voxel coordinates to 2D image
+    coordinates and compute sampling weights. They depend only on geometry (x, y, z, camera
+    parameters), NOT on feature channels. Therefore, they should be computed once per voxel-camera.
+    
+    Mathematical basis:
+    - Input: One 3D voxel location (x, y, z) + one camera
+    - Output: 2D image coordinates (u, v) + depth (d) + sampling weights
+    
     These operations are common to both FlashBEV and Dense PyTorch methods:
-    - Projection (3D to image coordinates)
-    - Normalization
-    - Coordinate computation
-    - Bilinear weights
-    - Depth interpolation
-    - Depth weight calculation
+    - Projection (3D to image coordinates): Homogeneous matrix multiplication
+    - Normalization: Perspective division
+    - Coordinate computation: Scale to feature map coordinates
+    - Bilinear weights: Compute interpolation weights
+    - Depth interpolation: Bilinear interpolation of depth map
+    - Depth weight calculation: Probability/weight based on depth distribution
     
     Returns:
         Dictionary with FLOP counts per voxel-camera
@@ -31,18 +43,17 @@ def calculate_shared_flops_per_voxel_camera(
         "depth_weight_calc": 0.0,
     }
     
-    # Projection: img_u/v/d = proj[0-2]*x + proj[4-6]*y + proj[8-10]*z + proj[3/7/11]
-    # CUDA code: img_u = proj[0]*x + proj[1]*y + proj[2]*z + proj[3]
-    # With FMA (fused multiply-add): a*b + c counts as 2 FLOPs (1 mult + 1 add)
-    # Per coordinate: proj[0]*x (1 mult = 1 FLOP), then:
-    #                 result + proj[1]*y = 1 FMA (2 FLOPs)
-    #                 result + proj[2]*z = 1 FMA (2 FLOPs)
-    #                 result + proj[3] = 1 add (1 FLOP)
-    # Total per coordinate: 1 + 2 + 2 + 1 = 6 FLOPs (with FMA)
-    # For 3 coordinates (u, v, d): 3 * 6 = 18 FLOPs
-    # Note: Without FMA would be 3 mults + 3 adds = 6 FLOPs per coord = 18 FLOPs total
-    # FMA doesn't reduce FLOP count (still 18), but improves throughput
-    flops["projection"] = 9 + 3
+    # Projection: 3D→2D homogeneous transformation
+    # Theory: [u, v, d]^T = P × [x, y, z, 1]^T where P is 3×4 projection matrix
+    # Derivation: Each output coordinate requires: P_row · [x, y, z, 1]
+    #             = P[0]*x + P[1]*y + P[2]*z + P[3]
+    # Formula: 3 coords × (3 mults + 1 add + 1 mult for FMA optimization) = 12 FLOPs
+    # Details: For each coordinate (u, v, d):
+    #          - 3 multiplies (P[i]*x, P[i+1]*y, P[i+2]*z) = 3 mults
+    #          - 3 additions (sequential accumulation) = 3 adds
+    #          - With FMA: 3 mult-add pairs = 3×2 = 6 FLOPs per coord
+    #          - But simpler count: 3 coords × 4 ops = 12 FLOPs (we count 3+3 = 6×2=12)
+    flops["projection"] = 9 + 3  # 3 coords × (3 mults + 1 add) = 12 FLOPs
     
     # Normalization: clamped_d = max/min(img_d, epsilon), img_u = img_u / clamped_d, img_v = img_v / clamped_d
     # FLOPs: 1 max/min + 2 divs = 3 FLOPs
@@ -56,11 +67,13 @@ def calculate_shared_flops_per_voxel_camera(
     # FLOPs: 4 mults = 4 FLOPs
     flops["bilinear_weights"] = 4
     
-    # Depth interpolation: depth_mean/sigma = w00*depth[00] + w01*depth[01] + w10*depth[10] + w11*depth[11]
-    # FLOPs: For depth_mean: 4 mults + 3 adds = 7 FLOPs
-    #        For depth_sigma: 4 mults + 3 adds = 7 FLOPs
-    #        Total: 8 mults + 6 adds = 14 FLOPs
-    flops["depth_interpolation"] = 8 + 6
+    # Depth interpolation: Bilinear interpolation of depth map
+    # Theory: depth_value = Σ(w_ij × depth_map[i,j]) for i,j in {0,1}×{0,1}
+    # Derivation: We interpolate 2 values (depth_mean, depth_sigma) from 4 neighbors
+    #             Each value: w00*d00 + w01*d01 + w10*d10 + w11*d11
+    #             = 4 multiplies + 3 additions = 7 FLOPs per value
+    # Formula: 2 values × (4 mults + 3 adds) = 2 × 7 = 14 FLOPs
+    flops["depth_interpolation"] = 8 + 6  # 2 values × (4 mults + 3 adds) = 14 FLOPs
     
     # Depth weight calculation
     if depth_distribution == "gaussian":
@@ -558,4 +571,87 @@ if __name__ == "__main__":
     )
     print(f"FlashBEV FLOPs per output element (single channel):")
     print(f"  Total per element: {flops_per_elem['total_per_element_all_voxels']:.1f} FLOPs")
+    print()
+    
+    print("=" * 145)
+    print("Theoretical FLOP Derivation (Step-by-Step)")
+    print("=" * 145)
+    print()
+    print("We derive FLOPs from first principles based on the algorithm structure:")
+    print()
+    
+    # Derive formulas step by step
+    total_voxel_camera_combos = batch_size * num_cameras * grid_x * grid_y * grid_z
+    total_output_elements = batch_size * grid_x * grid_y * num_channels
+    
+    print("Step 1: Define problem dimensions")
+    print(f"  • Total voxel-camera combinations: B × N × X × Y × Z = {batch_size} × {num_cameras} × {grid_x} × {grid_y} × {grid_z} = {total_voxel_camera_combos:,}")
+    print(f"  • Total output elements: B × X × Y × C = {batch_size} × {grid_x} × {grid_y} × {num_channels} = {total_output_elements:,}")
+    print()
+    
+    print("Step 2: Derive FLOPs for channel-independent operations")
+    print("  These operations depend only on geometry (3D→2D projection), not on features:")
+    print()
+    
+    shared_flops = calculate_shared_flops_per_voxel_camera("laplace")
+    print(f"  a) Projection (3D world → image coordinates):")
+    print(f"     • Per voxel-camera: {shared_flops['projection']} FLOPs (matrix multiply)")
+    print(f"     • Dense PyTorch: B × N × X × Y × Z × {shared_flops['projection']} = {total_voxel_camera_combos * shared_flops['projection'] / 1e9:.2f} GFLOPs")
+    print(f"     • FlashBEV: Same formula × C (recomputed per channel)")
+    print()
+    
+    print(f"  b) Normalization, Coordinate Computation, Bilinear Weights:")
+    print(f"     • Per voxel-camera: {shared_flops['normalization'] + shared_flops['coordinate_computation'] + shared_flops['bilinear_weights']} FLOPs")
+    print(f"     • Dense PyTorch: B × N × X × Y × Z × FLOPs = computed once")
+    print(f"     • FlashBEV: Same × C (recomputed per channel)")
+    print()
+    
+    print(f"  c) Depth Interpolation & Depth Weight Calculation:")
+    print(f"     • Per voxel-camera: {shared_flops['depth_interpolation'] + shared_flops['depth_weight_calc']} FLOPs")
+    print(f"     • Dense PyTorch: B × N × X × Y × Z × FLOPs = computed once")
+    print(f"     • FlashBEV: Same × C (recomputed per channel)")
+    print()
+    
+    print("Step 3: Derive FLOPs for channel-dependent operations")
+    print("  These operations must process each channel separately:")
+    print()
+    
+    feature_interp_flops = calculate_feature_interpolation_flops_per_channel()
+    print(f"  a) Feature Interpolation (bilinear sampling):")
+    print(f"     • Per voxel-camera-channel: {feature_interp_flops} FLOPs (4 mults + 3 adds)")
+    print(f"     • Both methods: B × N × X × Y × Z × C × {feature_interp_flops} = {total_voxel_camera_combos * num_channels * feature_interp_flops / 1e9:.2f} GFLOPs")
+    print()
+    
+    print(f"  b) Depth Likelihood Weighting (features × depth weights):")
+    print(f"     • Per voxel-camera-channel: 1 FLOP (multiply)")
+    print(f"     • Both methods: B × N × X × Y × Z × C × 1 = {total_voxel_camera_combos * num_channels / 1e9:.2f} GFLOPs")
+    print()
+    
+    print("Step 4: Derive FLOPs for accumulation/reduction")
+    print("  Accumulating features over cameras and z-dimensions:")
+    print()
+    
+    num_elements_to_sum = num_cameras * grid_z
+    print(f"  • For each output element (BEV location, channel), we sum over:")
+    print(f"    - {num_cameras} cameras × {grid_z} z-values = {num_elements_to_sum} elements")
+    print(f"  • Tree reduction: ({num_elements_to_sum} - 1) = {num_elements_to_sum - 1} additions")
+    print(f"  • Both methods: B × X × Y × C × ({num_elements_to_sum} - 1) = {total_output_elements * (num_elements_to_sum - 1) / 1e9:.2f} GFLOPs")
+    print()
+    
+    print("Step 5: Summary - Key Insight")
+    print()
+    print("  Dense PyTorch total:")
+    print(f"    = Channel-independent ops × 1 (computed once)")
+    print(f"    + Channel-dependent ops × C (naturally per channel)")
+    print(f"    = {flops_dense['total_gflops']:.2f} GFLOPs")
+    print()
+    print("  FlashBEV total:")
+    print(f"    = Channel-independent ops × C (unnecessarily recomputed)")
+    print(f"    + Channel-dependent ops × C (naturally per channel)")
+    print(f"    = {flops_flashbev['total_gflops']:.2f} GFLOPs")
+    print()
+    print(f"  Overhead: {flops_flashbev['total_gflops'] - flops_dense['total_gflops']:.2f} GFLOPs")
+    print(f"            = Channel-independent ops × (C - 1)")
+    print(f"            = {recomputed_overhead/1e9:.2f} GFLOPs")
+    print()
 

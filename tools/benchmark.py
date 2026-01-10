@@ -67,7 +67,7 @@ def determine_experiment_type(cfg: DictConfig):
     depth_weight_threshold_list = _to_list(cfg.depth_weight_threshold_list) if has_depth_threshold_exp else [cfg.depth_weight_threshold]
     num_cameras_list = _to_list(cfg.num_cameras_list) if has_cameras_exp else [cfg.num_cameras]
     
-    z_range = cfg.z_max - cfg.z_min
+    z_range = cfg.grid_config.z[1] - cfg.grid_config.z[0]
     z_resolutions = [z_range / float(num_bins) for num_bins in num_height_bins_list]
     
     return {
@@ -96,7 +96,6 @@ def run_single_benchmark(
     depth_threshold: float,
     depth_distribution_int: int,
     input_list,
-    sample_grid_z,
     is_kernel_only: bool,
 ):
     """Run a single benchmark for a method."""
@@ -145,7 +144,6 @@ def run_single_benchmark(
             
             transformer = create_view_transformer(
                 grid_config=grid_config,
-                sample_grid_z=sample_grid_z or [cfg.z_min, cfg.z_max, z_res],
                 input_size=input_size,
                 in_channels=cfg.in_channels,
                 out_channels=cfg.out_channels,
@@ -248,7 +246,6 @@ def run_experiment(
         print(f"Testing {value_key}: {value}")
         print(f"{'='*80}\n")
         
-        sample_grid_z = [cfg.z_min, cfg.z_max, z_res]
         input_list = None
         
         if not cfg.kernel_only and any(not (m["fuse_projection"] and not m.get("use_bev_pool", False)) for m in methods):
@@ -275,7 +272,7 @@ def run_experiment(
                     result = run_single_benchmark(
                         method_config, cfg, grid_config, grid_x, grid_y, roi_range,
                         input_size, calib_params, num_bins, z_res, num_cams,
-                        depth_threshold, depth_distribution_int, input_list, sample_grid_z,
+                        depth_threshold, depth_distribution_int, input_list,
                         cfg.kernel_only,
                     )
                     
@@ -325,7 +322,7 @@ def run_experiment(
                 result = run_single_benchmark(
                     method_config, cfg, grid_config, grid_x, grid_y, roi_range,
                     input_size, calib_params, num_bins, z_res, num_cams,
-                    depth_threshold, depth_distribution_int, input_list, sample_grid_z,
+                    depth_threshold, depth_distribution_int, input_list,
                     cfg.kernel_only,
                 )
                 

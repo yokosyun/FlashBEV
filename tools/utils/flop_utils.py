@@ -83,38 +83,30 @@ def _calculate_view_transform_flops(
         + final_division_flops
     )
     
-    # Build detailed breakdown
-    flops = {}
+    # Build detailed breakdown (using unified key names)
+    channel_independent_mult = C if multiply_channel_independent_by_c else 1
+    flops = {
+        "projection": B * N * X * Y * Z * channel_independent_mult * projection_flops,
+        "normalization": B * N * X * Y * Z * channel_independent_mult * normalization_flops,
+        "coordinate_computation": B * N * X * Y * Z * channel_independent_mult * coordinate_computation_flops,
+        "bilinear_weights": B * N * X * Y * Z * channel_independent_mult * bilinear_weights_flops,
+        "depth_interpolation": B * N * X * Y * Z * channel_independent_mult * depth_interpolation_flops,
+        "depth_weight_calc": B * N * X * Y * Z * channel_independent_mult * depth_weight_calc_flops,
+        "feature_interpolation": grid_sample_features_flops,
+        "feature_weighting": feature_weighting_flops,
+        "bev_accumulation": sum_over_cameras_z_flops,
+        "valid_count": masking_flops,
+        "final_division": final_division_flops,
+    }
+    
+    if not multiply_channel_independent_by_c:
+        flops["grid_sample_depths"] = grid_sample_depths_flops
+    
     if multiply_channel_independent_by_c:
-        # FlashBEV naming
-        flops["projection_per_voxel"] = B * N * X * Y * Z * C * projection_flops
-        flops["normalization"] = B * N * X * Y * Z * C * normalization_flops
-        flops["coordinate_computation"] = B * N * X * Y * Z * C * coordinate_computation_flops
-        flops["bilinear_weights"] = B * N * X * Y * Z * C * bilinear_weights_flops
-        flops["depth_interpolation"] = B * N * X * Y * Z * C * depth_interpolation_flops
-        flops["depth_weight_calc"] = B * N * X * Y * Z * C * depth_weight_calc_flops
-        flops["feature_interpolation"] = grid_sample_features_flops
-        flops["depth_likelihood_weighting"] = feature_weighting_flops
-        flops["bev_accumulation"] = sum_over_cameras_z_flops
         flops["weighted_accumulation"] = feature_weighting_flops + sum_over_cameras_z_flops
-        flops["valid_count_increment"] = masking_flops
-        flops["final_division"] = final_division_flops
         flops["recompute_flops"] = channel_independent_base_flops + masking_flops
         flops["non_recompute_flops"] = grid_sample_features_flops + feature_weighting_flops + sum_over_cameras_z_flops + final_division_flops
     else:
-        # Dense PyTorch naming
-        flops["projection"] = B * N * X * Y * Z * projection_flops
-        flops["normalization"] = B * N * X * Y * Z * normalization_flops
-        flops["coordinate_computation"] = B * N * X * Y * Z * coordinate_computation_flops
-        flops["bilinear_weights"] = B * N * X * Y * Z * bilinear_weights_flops
-        flops["depth_interpolation"] = B * N * X * Y * Z * depth_interpolation_flops
-        flops["depth_weight_calc"] = B * N * X * Y * Z * depth_weight_calc_flops
-        flops["grid_sample_features"] = grid_sample_features_flops
-        flops["grid_sample_depths"] = grid_sample_depths_flops
-        flops["feature_weighting"] = feature_weighting_flops
-        flops["masking"] = masking_flops
-        flops["sum_over_cameras_z"] = sum_over_cameras_z_flops
-        flops["final_division"] = final_division_flops
         flops["non_recompute_flops"] = channel_independent_base_flops + channel_dependent_flops
     
     flops["total"] = channel_independent_base_flops + channel_dependent_flops
@@ -239,18 +231,21 @@ if __name__ == "__main__":
     print(subheader)
     print(separator)
     
+    # Keys are now unified, so we can use them directly
+    
     all_operations = [
-        ("Projection", "projection_per_voxel", "projection", True, "B*N*X*Y*Z*12", "B*X*Y*Z*N*C*12"),
-        ("Normalization", "normalization", "normalization", True, "B*N*X*Y*Z*3", "B*X*Y*Z*N*C*3"),
-        ("Coordinate Computation", "coordinate_computation", "coordinate_computation", True, "B*N*X*Y*Z*4", "B*X*Y*Z*N*C*4"),
-        ("Bilinear Weights", "bilinear_weights", "bilinear_weights", True, "B*N*X*Y*Z*4", "B*X*Y*Z*N*C*4"),
-        ("Depth Interpolation", "depth_interpolation", "grid_sample_depths", True, "B*N*X*Y*Z*14", "B*X*Y*Z*N*C*14"),
-        ("Depth Weight Calc", "depth_weight_calc", "depth_weight_calc", True, "B*N*X*Y*Z*7", "B*X*Y*Z*N*C*7"),
-        ("Feature Interpolation", "feature_interpolation", "grid_sample_features", False, "B*N*X*Y*Z*C*7", "B*X*Y*Z*N*C*7"),
-        ("Depth Likelihood Weighting", "depth_likelihood_weighting", "feature_weighting", False, "B*N*X*Y*Z*C*1", "B*X*Y*Z*N*C*1"),
-        ("BEV Accumulation", "bev_accumulation", "sum_over_cameras_z", False, "B*X*Y*C*(N*Z-1)", "B*X*Y*C*(N*Z-1)"),
-        ("Valid Count", "valid_count_increment", "masking", True, "B*N*X*Y*Z*1", "B*X*Y*Z*N*C*1"),
-        ("Final Division", "final_division", "final_division", False, "B*X*Y*C*1", "B*X*Y*C*1"),
+        ("Projection", "projection", True, "B*N*X*Y*Z*12"),
+        ("Normalization", "normalization", True, "B*N*X*Y*Z*3"),
+        ("Coordinate Computation", "coordinate_computation", True, "B*N*X*Y*Z*4"),
+        ("Bilinear Weights", "bilinear_weights", True, "B*N*X*Y*Z*4"),
+        ("Depth Interpolation", "depth_interpolation", True, "B*N*X*Y*Z*14"),
+        ("Grid Sample Depths", "grid_sample_depths", False, "B*N*X*Y*Z*2*7"),
+        ("Depth Weight Calc", "depth_weight_calc", True, "B*N*X*Y*Z*7"),
+        ("Feature Interpolation", "feature_interpolation", False, "B*N*X*Y*Z*C*7"),
+        ("Depth Likelihood Weighting", "feature_weighting", False, "B*N*X*Y*Z*C*1"),
+        ("BEV Accumulation", "bev_accumulation", False, "B*X*Y*C*(N*Z-1)"),
+        ("Valid Count", "valid_count", True, "B*N*X*Y*Z*1"),
+        ("Final Division", "final_division", False, "B*X*Y*C*1"),
     ]
     
     recomputed_overhead = 0.0
@@ -258,23 +253,17 @@ if __name__ == "__main__":
     total_flashbev = 0.0
     recomputed_ops_count = 0
     
-    for op_name, flashbev_key, dense_key, is_recomputed, dense_formula, flashbev_formula in all_operations:
+    for op_name, canonical_key, is_recomputed, formula in all_operations:
         dense_value = 0.0
         flashbev_value = 0.0
         
-        if dense_key:
-            if isinstance(dense_key, list):
-                for key in dense_key:
-                    if key in flops_dense:
-                        dense_value += flops_dense[key] / 1e9
-                        total_dense += flops_dense[key]
-            elif dense_key in flops_dense:
-                dense_value = flops_dense[dense_key] / 1e9
-                total_dense += dense_value * 1e9
+        if canonical_key in flops_dense:
+            dense_value = flops_dense[canonical_key] / 1e9
+            total_dense += flops_dense[canonical_key]
         
-        if flashbev_key and flashbev_key in flops_flashbev:
-            flashbev_value = flops_flashbev[flashbev_key] / 1e9
-            total_flashbev += flashbev_value * 1e9
+        if canonical_key in flops_flashbev:
+            flashbev_value = flops_flashbev[canonical_key] / 1e9
+            total_flashbev += flops_flashbev[canonical_key]
         
         if is_recomputed:
             recomputed_ops_count += 1
@@ -298,21 +287,8 @@ if __name__ == "__main__":
         dense_str = f"{dense_value:>16.2f} G" if dense_value > 0 else f"{'—':>17}"
         flashbev_str = f"{flashbev_value:>16.2f} G" if flashbev_value > 0 else f"{'—':>17}"
         
-        # Show base formula (Recomp. ×C column indicates if recomputed)
-        if is_recomputed:
-            # For recomputed operations, show the base formula (without ×C notation)
-            # since the Recomp. ×C column already indicates recomputation
-            if "B*N*X*Y*Z*C*" in dense_formula:
-                # Already has C in formula, show full formula (both compute per channel)
-                formula_str = dense_formula
-            elif "B*N*X*Y*Z*" in dense_formula:
-                # No C in formula, show base formula (Recomp. ×C column shows it's recomputed)
-                formula_str = dense_formula
-            else:
-                formula_str = dense_formula
-        else:
-            # Show the formula (both should be the same for non-recomputed)
-            formula_str = dense_formula if dense_value > 0 else flashbev_formula
+        # Show formula (Recomp. ×C column indicates if recomputed)
+        formula_str = formula
         
         # Mark recomputed operations with checkbox
         recomp_marker = "✓" if is_recomputed else " "

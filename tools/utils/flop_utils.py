@@ -114,9 +114,8 @@ def calculate_flashbevpool_flops(
     """
     Calculate theoretical FLOPs for flash_bevpool_kernel.
     
-    Note: Due to kernel design, projection and depth_weight calculations are recomputed
-    for each channel even though they don't depend on the channel. This is wasteful
-    recomputation that increases FLOP count.
+    Simplified approach: Separate operations into recompute_flops (channel-independent)
+    and non_recompute_flops (channel-dependent), then multiply recompute_flops by C.
     
     Args:
         batch_size: Batch size
@@ -132,7 +131,7 @@ def calculate_flashbevpool_flops(
     Returns:
         Dictionary with FLOP counts for different operation categories
     """
-    # Define problem dimensions (matching theoretical derivation)
+    # Define problem dimensions
     B = batch_size
     X = grid_x
     Y = grid_y
@@ -148,58 +147,65 @@ def calculate_flashbevpool_flops(
     shared_flops = calculate_shared_flops_per_voxel_camera(depth_distribution)
     feature_interp_flops = calculate_feature_interpolation_flops_per_channel()
     
-    # Theoretical derivation: FlashBEV recomputes channel-independent operations per channel
-    # Formula: B × X × Y × Z × N × C × FLOPs_per_voxel_camera
+    # Base FLOPs per voxel-camera (channel-independent, should be computed once)
+    base_per_voxel_camera = (
+        shared_flops["projection"]
+        + shared_flops["normalization"]
+        + shared_flops["coordinate_computation"]
+        + shared_flops["bilinear_weights"]
+        + shared_flops["depth_interpolation"]
+        + shared_flops["depth_weight_calc"]
+    )
     
-    # Channel-independent operations (recomputed per channel in FlashBEV):
-    # Theory: These depend only on geometry (x,y,z,camera), but FlashBEV computes them C times
-    projection_flops_per_voxel_camera = shared_flops["projection"]
+    # Recomputed FLOPs: Channel-independent operations × C (recomputed per channel)
+    # Formula: B × N × X × Y × Z × base_per_voxel_camera × C
+    recompute_flops = B * N * X * Y * Z * base_per_voxel_camera * C
+    
+    # Non-recomputed FLOPs: Channel-dependent operations (naturally per channel)
+    # Feature interpolation: B × N × X × Y × Z × C × feature_interp_flops
+    feature_interpolation_flops = B * N * X * Y * Z * C * feature_interp_flops
+    
+    # Depth likelihood weighting: B × N × X × Y × Z × C × 1
+    depth_weighting_flops = B * N * X * Y * Z * C * 1
+    
+    # BEV accumulation: B × X × Y × C × (N × Z - 1)
+    num_elements_per_output = N * Z
+    bev_accumulation_flops = B * X * Y * C * (num_elements_per_output - 1)
+    
+    # Valid count (recomputed in FlashBEV): B × N × X × Y × Z × C × 1
+    valid_count_flops = B * N * X * Y * Z * C * 1
+    
+    # Final division: B × X × Y × C × 1
+    final_division_flops = B * X * Y * C * 1
+    
+    non_recompute_flops = (
+        feature_interpolation_flops
+        + depth_weighting_flops
+        + bev_accumulation_flops
+        + final_division_flops
+    )
+    
+    # Build detailed breakdown for backward compatibility
     flops = {
-        "projection_per_voxel": B * X * Y * Z * N * C * projection_flops_per_voxel_camera,
-        
-        "normalization": B * X * Y * Z * N * C * shared_flops["normalization"],
-        
-        "coordinate_computation": B * X * Y * Z * N * C * shared_flops["coordinate_computation"],
-        
-        "bilinear_weights": B * X * Y * Z * N * C * shared_flops["bilinear_weights"],
-        
-        "depth_interpolation": B * X * Y * Z * N * C * shared_flops["depth_interpolation"],
-        
-        "depth_weight_calc": B * X * Y * Z * N * C * shared_flops["depth_weight_calc"],
+        "projection_per_voxel": B * N * X * Y * Z * C * shared_flops["projection"],
+        "normalization": B * N * X * Y * Z * C * shared_flops["normalization"],
+        "coordinate_computation": B * N * X * Y * Z * C * shared_flops["coordinate_computation"],
+        "bilinear_weights": B * N * X * Y * Z * C * shared_flops["bilinear_weights"],
+        "depth_interpolation": B * N * X * Y * Z * C * shared_flops["depth_interpolation"],
+        "depth_weight_calc": B * N * X * Y * Z * C * shared_flops["depth_weight_calc"],
+        "feature_interpolation": feature_interpolation_flops,
+        "depth_likelihood_weighting": depth_weighting_flops,
+        "bev_accumulation": bev_accumulation_flops,
+        "weighted_accumulation": depth_weighting_flops + bev_accumulation_flops,
+        "valid_count_increment": valid_count_flops,
+        "final_division": final_division_flops,
     }
     
-    # Channel-dependent operations (naturally per channel):
-    # Theory: Feature interpolation requires processing each channel separately
-    # Formula: B × X × Y × Z × N × C × FLOPs_per_channel
-    flops["feature_interpolation"] = B * X * Y * Z * N * C * feature_interp_flops
-    
-    # Depth Likelihood Weighting: feat_value × depth_weight
-    # Theory: Multiply each interpolated feature by its depth weight
-    # Formula: B × X × Y × Z × N × C × 1 (one multiply per voxel-camera-channel)
-    flops["depth_likelihood_weighting"] = B * X * Y * Z * N * C * 1
-    
-    # BEV Accumulation: Sum over cameras and z-dimensions
-    # Theory: For each output (BEV location, channel), sum over N×Z elements
-    # Formula: B × X × Y × C × (N × Z - 1) (tree reduction)
-    num_elements_per_output = N * Z
-    flops["bev_accumulation"] = B * X * Y * C * (num_elements_per_output - 1)
-    
-    # Keep backward compatibility: weighted_accumulation = depth_weighting + bev_accumulation
-    flops["weighted_accumulation"] = flops["depth_likelihood_weighting"] + flops["bev_accumulation"]
-    
-    # Valid Count: Track number of valid voxels per BEV location
-    # Theory: FlashBEV increments valid_count per channel (recomputed)
-    # Formula: B × X × Y × Z × N × C × 1 (one increment per voxel-camera-channel)
-    flops["valid_count_increment"] = B * X * Y * Z * N * C * 1
-    
-    # Final Division: Divide accumulated features by valid count
-    # Theory: Normalize by number of valid voxels per BEV location
-    # Formula: B × X × Y × C × 1 (one division per output element)
-    flops["final_division"] = B * X * Y * C * 1
-    
-    total_flops = sum(flops.values())
-    flops["total"] = total_flops
-    flops["total_gflops"] = total_flops / 1e9
+    # Add summary categories (valid_count is also recomputed)
+    flops["recompute_flops"] = recompute_flops + valid_count_flops
+    flops["non_recompute_flops"] = non_recompute_flops
+    flops["total"] = flops["recompute_flops"] + flops["non_recompute_flops"]
+    flops["total_gflops"] = flops["total"] / 1e9
     
     return flops
 
@@ -255,14 +261,8 @@ def calculate_dense_pytorch_sampling_vt_flops(
     """
     Calculate theoretical FLOPs for Dense PyTorch Sampling-VT.
     
-    This method creates dense 3D voxel grid [B, N, X, Y, Z] and uses vectorized operations.
-    The key difference is it processes all channels at once via grid_sample, which is highly
-    optimized and fuses operations. This is why it appears to have fewer FLOPs - the actual
-    floating-point operations are similar, but grid_sample is more efficient.
-    
-    Note: The lower FLOP count here reflects the efficiency of PyTorch's optimized grid_sample
-    kernel, not that it does less work. Both methods process the same voxel-channel-camera
-    combinations, but Dense PyTorch uses vectorized/fused operations.
+    Simplified approach: Compute channel-independent operations once (not multiplied by C),
+    and channel-dependent operations per channel (multiplied by C).
     
     Args:
         batch_size: Batch size
@@ -277,7 +277,7 @@ def calculate_dense_pytorch_sampling_vt_flops(
     Returns:
         Dictionary with FLOP counts for different operation categories
     """
-    # Define problem dimensions (matching theoretical derivation)
+    # Define problem dimensions
     B = batch_size
     X = grid_x
     Y = grid_y
@@ -288,60 +288,68 @@ def calculate_dense_pytorch_sampling_vt_flops(
     shared_flops = calculate_shared_flops_per_voxel_camera(depth_distribution)
     feature_interp_flops = calculate_feature_interpolation_flops_per_channel()
     
-    # Theoretical derivation: Dense PyTorch computes channel-independent operations once
-    # Formula: B × N × X × Y × Z × FLOPs_per_voxel_camera (NOT multiplied by C)
+    # Non-recomputed FLOPs: Channel-independent operations (computed once, NOT × C)
+    # Formula: B × N × X × Y × Z × base_per_voxel_camera
+    base_per_voxel_camera = (
+        shared_flops["projection"]
+        + shared_flops["normalization"]
+        + shared_flops["coordinate_computation"]
+        + shared_flops["bilinear_weights"]
+        + shared_flops["depth_interpolation"]
+        + shared_flops["depth_weight_calc"]
+    )
+    non_recompute_flops_base = B * N * X * Y * Z * base_per_voxel_camera
     
-    # Channel-independent operations (computed once per voxel-camera):
-    # Theory: These depend only on geometry, computed once and broadcast to channels
-    flops = {
-        "projection": B * N * X * Y * Z * shared_flops["projection"],
-        
-        "normalization": B * N * X * Y * Z * shared_flops["normalization"],
-        
-        "coordinate_computation": B * N * X * Y * Z * shared_flops["coordinate_computation"],
-        
-        "bilinear_weights": B * N * X * Y * Z * shared_flops["bilinear_weights"],
-        
-        "depth_interpolation": B * N * X * Y * Z * shared_flops["depth_interpolation"],
-        
-        "depth_weight_calc": B * N * X * Y * Z * shared_flops["depth_weight_calc"],
-    }
+    # Grid sample: Feature interpolation (C channels) + depth interpolation (2 values)
+    # Formula: B × N × X × Y × Z × C × feature_interp_flops + B × N × X × Y × Z × 2 × feature_interp_flops
+    grid_sample_features_flops = B * N * X * Y * Z * C * feature_interp_flops
+    grid_sample_depths_flops = B * N * X * Y * Z * 2 * feature_interp_flops
     
-    # Grid Sample: Bilinear interpolation via PyTorch's optimized grid_sample
-    # Theory: Interpolates features (C channels) and depths (2 values: mean, sigma)
-    # Formula: 
-    #   - Features: B × N × X × Y × Z × C × FLOPs_per_channel
-    #   - Depths: B × N × X × Y × Z × 2 × FLOPs_per_value
-    flops["grid_sample_features"] = B * N * X * Y * Z * C * feature_interp_flops
-    flops["grid_sample_depths"] = B * N * X * Y * Z * 2 * feature_interp_flops
-    
-    # Feature Weighting: Multiply features by depth weights
-    # Theory: feat_weighted = feat × depth_weight (broadcast depth_weight to channels)
-    # Formula: B × N × X × Y × Z × C × 1 (one multiply per voxel-camera-channel)
+    # Feature weighting: B × N × X × Y × Z × C × 1
     total_voxel_camera_combos = B * N * X * Y * Z
     total_valid_voxels = int(total_voxel_camera_combos * average_valid_voxel_ratio)
-    flops["feature_weighting"] = total_valid_voxels * C * 1
+    feature_weighting_flops = total_valid_voxels * C * 1
     
-    # Masking: Compute valid voxel mask
-    # Theory: valid_mask = (voxel is within image bounds) - computed once per voxel-camera
-    # Formula: B × N × X × Y × Z × 1 (one comparison per voxel-camera)
-    flops["masking"] = total_valid_voxels * 1
+    # Masking: B × N × X × Y × Z × 1 (computed once per voxel-camera)
+    masking_flops = total_valid_voxels * 1
     
-    # Sum over cameras and z-dimensions: bev_feat = features_3d.sum(dim=[1, -1])
-    # Theory: For each output (BEV location, channel), sum over N×Z elements using tree reduction
-    # Formula: B × X × Y × C × (N × Z - 1) (N×Z-1 additions per output element)
-    total_output_elements = B * X * Y * C
+    # Sum over cameras and z: B × X × Y × C × (N × Z - 1)
     num_elements_per_output = N * Z
-    flops["sum_over_cameras_z"] = total_output_elements * (num_elements_per_output - 1)
+    sum_over_cameras_z_flops = B * X * Y * C * (num_elements_per_output - 1)
     
-    # Final Division: Divide accumulated features by valid count
-    # Theory: Normalize by number of valid voxels per BEV location
-    # Formula: B × X × Y × C × 1 (one division per output element)
-    flops["final_division"] = total_output_elements * 1
+    # Final division: B × X × Y × C × 1
+    final_division_flops = B * X * Y * C * 1
     
-    total_flops = sum(flops.values())
-    flops["total"] = total_flops
-    flops["total_gflops"] = total_flops / 1e9
+    non_recompute_flops = (
+        non_recompute_flops_base
+        + grid_sample_features_flops
+        + grid_sample_depths_flops
+        + feature_weighting_flops
+        + masking_flops
+        + sum_over_cameras_z_flops
+        + final_division_flops
+    )
+    
+    # Build detailed breakdown for backward compatibility
+    flops = {
+        "projection": B * N * X * Y * Z * shared_flops["projection"],
+        "normalization": B * N * X * Y * Z * shared_flops["normalization"],
+        "coordinate_computation": B * N * X * Y * Z * shared_flops["coordinate_computation"],
+        "bilinear_weights": B * N * X * Y * Z * shared_flops["bilinear_weights"],
+        "depth_interpolation": B * N * X * Y * Z * shared_flops["depth_interpolation"],
+        "depth_weight_calc": B * N * X * Y * Z * shared_flops["depth_weight_calc"],
+        "grid_sample_features": grid_sample_features_flops,
+        "grid_sample_depths": grid_sample_depths_flops,
+        "feature_weighting": feature_weighting_flops,
+        "masking": masking_flops,
+        "sum_over_cameras_z": sum_over_cameras_z_flops,
+        "final_division": final_division_flops,
+    }
+    
+    # Add summary categories
+    flops["non_recompute_flops"] = non_recompute_flops
+    flops["total"] = non_recompute_flops
+    flops["total_gflops"] = flops["total"] / 1e9
     
     return flops
 

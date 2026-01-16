@@ -185,16 +185,14 @@ def print_tables(gpus, lat_ms, norm_lat, speedups):
 def create_plots(gpus, lat_ms, norm_lat, speedups):
     """Create publication-ready normalized latency plots."""
     n_gpus = len(gpus)
-    n_cols = 2
-    n_rows = (n_gpus + n_cols - 1) // n_cols
+    n_cols = n_gpus  # One column per GPU (arrange in a row)
+    n_rows = 1
     
-    fig, axes = plt.subplots(n_rows, n_cols, figsize=(10, 8))
+    fig, axes = plt.subplots(n_rows, n_cols, figsize=(5 * n_gpus, 4))
     if n_gpus == 1:
         axes = [axes]
-    elif n_rows == 1:
-        axes = axes if isinstance(axes, np.ndarray) else [axes]
     else:
-        axes = axes.flatten()
+        axes = axes.flatten() if isinstance(axes, np.ndarray) else [axes]
     
     # Publication-ready styling
     colors = {"dense": "#d62728", "flash": "#2ca02c"}

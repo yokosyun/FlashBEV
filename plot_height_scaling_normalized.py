@@ -347,14 +347,9 @@ def create_plots(gpus, lat_ms, norm_lat, speedups):
     fig.legend(
         by_label.values(),
         by_label.keys(),
-        loc="upper center",
+        loc="upper right",
         ncol=2,
         fontsize=12,
-        frameon=True,
-        fancybox=True,
-        shadow=False,
-        bbox_to_anchor=(0.5, 0.98),
-        columnspacing=1.5
     )
     
     # Main title

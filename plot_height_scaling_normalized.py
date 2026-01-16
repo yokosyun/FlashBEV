@@ -200,7 +200,6 @@ def create_plots(gpus, lat_ms, norm_lat, speedups):
     labels = {"dense": "Dense PyTorch", "flash": "FlashBEV"}
     linewidth = 2.5
     markersize = 9
-    oom_markersize = 10
     
     for idx, gpu in enumerate(gpus):
         ax = axes[idx]
@@ -227,30 +226,6 @@ def create_plots(gpus, lat_ms, norm_lat, speedups):
                 markeredgecolor=colors["dense"],
                 markeredgewidth=1.5
             )
-            
-            # Mark OOM with 'x' marker if not all Z values are present
-            if len(dense_z) < len(Z):
-                last_z = dense_z[-1]
-                last_val = dense_norm[-1]
-                ax.plot(
-                    last_z, last_val,
-                    marker="x",
-                    color=colors["dense"],
-                    markersize=oom_markersize,
-                    markeredgewidth=2.5,
-                    zorder=4,
-                    linestyle="none"
-                )
-                ax.annotate(
-                    "OOM",
-                    xy=(last_z, last_val),
-                    xytext=(8, 8),
-                    textcoords="offset points",
-                    fontsize=10,
-                    color=colors["dense"],
-                    fontweight="bold",
-                    ha="left"
-                )
         
         # Plot FlashBEV
         if flash_z and flash_norm:
@@ -266,30 +241,6 @@ def create_plots(gpus, lat_ms, norm_lat, speedups):
                 markeredgecolor=colors["flash"],
                 markeredgewidth=1.5
             )
-            
-            # Mark OOM with 'x' marker if not all Z values are present
-            if len(flash_z) < len(Z):
-                last_z = flash_z[-1]
-                last_val = flash_norm[-1]
-                ax.plot(
-                    last_z, last_val,
-                    marker="x",
-                    color=colors["flash"],
-                    markersize=oom_markersize,
-                    markeredgewidth=2.5,
-                    zorder=4,
-                    linestyle="none"
-                )
-                ax.annotate(
-                    "OOM",
-                    xy=(last_z, last_val),
-                    xytext=(8, 8),
-                    textcoords="offset points",
-                    fontsize=10,
-                    color=colors["flash"],
-                    fontweight="bold",
-                    ha="left"
-                )
             
             # Add speedup annotations for all Z values where both methods are valid
             for z in Z:

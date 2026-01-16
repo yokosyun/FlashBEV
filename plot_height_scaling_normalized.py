@@ -185,16 +185,14 @@ def print_tables(gpus, lat_ms, norm_lat, speedups):
 def create_plots(gpus, lat_ms, norm_lat, speedups):
     """Create publication-ready normalized latency plots."""
     n_gpus = len(gpus)
-    n_cols = 2
-    n_rows = (n_gpus + n_cols - 1) // n_cols
+    n_cols = n_gpus  # One column per GPU (arrange in a row)
+    n_rows = 1
     
-    fig, axes = plt.subplots(n_rows, n_cols, figsize=(10, 8))
+    fig, axes = plt.subplots(n_rows, n_cols, figsize=(5 * n_gpus, 4))
     if n_gpus == 1:
         axes = [axes]
-    elif n_rows == 1:
-        axes = axes if isinstance(axes, np.ndarray) else [axes]
     else:
-        axes = axes.flatten()
+        axes = axes.flatten() if isinstance(axes, np.ndarray) else [axes]
     
     # Publication-ready styling
     colors = {"dense": "#d62728", "flash": "#2ca02c"}
@@ -293,49 +291,24 @@ def create_plots(gpus, lat_ms, norm_lat, speedups):
                     ha="left"
                 )
             
-            # Add speedup annotations
-            # At Z0
-            z0 = Z[0]
-            if z0 in speedups[gpu] and speedups[gpu][z0] is not None:
-                z0_idx = flash_z.index(z0) if z0 in flash_z else None
-                if z0_idx is not None:
-                    z0_y = flash_norm[z0_idx]
-                    speedup_z0 = speedups[gpu][z0]
-                    ax.annotate(
-                        f"×{speedup_z0:.1f}",
-                        xy=(z0, z0_y),
-                        xytext=(8, -12),
-                        textcoords="offset points",
-                        fontsize=10,
-                        color=colors["flash"],
-                        fontweight="bold",
-                        bbox=dict(boxstyle="round,pad=0.3", facecolor="white", edgecolor=colors["flash"], linewidth=1.5),
-                        ha="left"
-                    )
-            
-            # At largest Z with valid Dense+Flash
-            max_valid_z = None
-            for z in reversed(Z):
+            # Add speedup annotations for all Z values where both methods are valid
+            for z in Z:
                 if z in speedups[gpu] and speedups[gpu][z] is not None:
-                    max_valid_z = z
-                    break
-            
-            if max_valid_z and max_valid_z != z0:
-                max_z_idx = flash_z.index(max_valid_z) if max_valid_z in flash_z else None
-                if max_z_idx is not None:
-                    max_z_y = flash_norm[max_z_idx]
-                    speedup_max = speedups[gpu][max_valid_z]
-                    ax.annotate(
-                        f"×{speedup_max:.1f}",
-                        xy=(max_valid_z, max_z_y),
-                        xytext=(8, -12),
-                        textcoords="offset points",
-                        fontsize=10,
-                        color=colors["flash"],
-                        fontweight="bold",
-                        bbox=dict(boxstyle="round,pad=0.3", facecolor="white", edgecolor=colors["flash"], linewidth=1.5),
-                        ha="left"
-                    )
+                    z_idx = flash_z.index(z) if z in flash_z else None
+                    if z_idx is not None:
+                        z_y = flash_norm[z_idx]
+                        speedup_val = speedups[gpu][z]
+                        ax.annotate(
+                            f"×{speedup_val:.1f}",
+                            xy=(z, z_y),
+                            xytext=(8, -12),
+                            textcoords="offset points",
+                            fontsize=10,
+                            color=colors["flash"],
+                            fontweight="bold",
+                            bbox=dict(boxstyle="round,pad=0.3", facecolor="white", edgecolor=colors["flash"], linewidth=1.5),
+                            ha="left"
+                        )
         
         # Subplot styling
         ax.set_xlabel("Num Height Bins (Z)", fontsize=13)

@@ -38,10 +38,12 @@ uv run python tools/benchmark.py
 ## Override config from command line
 ```bash
 # With calibration file and height bins
-uv run python tools/benchmark.py load_calib=inputs/calib_nuscenes.json num_height_bins=[4,8,12,16]
+uv run python tools/benchmark.py output_json=outputs/A6000.json load_calib=inputs/calib_nuscenes.json num_height_bins=[4,8,12,16]
 
 uv run python tools/evaluate_differences.py load_calib=inputs/calib_nuscenes.json
 
 uv run python tools/utils/flop_utils.py
 
 uv run python tools/utils/memory_utils.py
+
+uv run python plot_height_scaling_normalized.py

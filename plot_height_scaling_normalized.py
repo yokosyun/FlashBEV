@@ -306,7 +306,7 @@ def create_plots(gpus, lat_ms, norm_lat, speedups):
                             fontsize=10,
                             color=colors["flash"],
                             fontweight="bold",
-                            bbox=dict(boxstyle="round,pad=0.3", facecolor="white", edgecolor=colors["flash"], linewidth=1.5),
+                            bbox=dict(boxstyle="round", facecolor="white", edgecolor=colors["flash"], linewidth=1.0),
                             ha="left"
                         )
         

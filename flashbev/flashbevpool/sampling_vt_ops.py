@@ -1,4 +1,4 @@
-# Copyright (c) Phigent Robotics. All rights reserved.
+# Copyright (c) Shunsuke Yokokawa. All rights reserved.
 
 from . import sampling_vt_ext
 

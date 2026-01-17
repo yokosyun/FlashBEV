@@ -1,3 +1,5 @@
+# Copyright (c) Shunsuke Yokokawa. All rights reserved.
+
 """
 Reproducible plotting script for ECCV paper.
 Generates "Normalized Latency vs Num Height Bins" figure across multiple GPUs.

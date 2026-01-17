@@ -1,3 +1,5 @@
+# Copyright (c) Shunsuke Yokokawa. All rights reserved.
+
 import torch
 import torch.nn as nn
 from typing import Tuple

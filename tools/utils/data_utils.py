@@ -1,3 +1,5 @@
+# Copyright (c) Shunsuke Yokokawa. All rights reserved.
+
 import json
 from typing import Dict, List, Tuple, Optional
 

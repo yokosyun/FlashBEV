@@ -1,3 +1,5 @@
+# Copyright (c) Shunsuke Yokokawa. All rights reserved.
+
 """
 Utilities for calculating FLOPs (Floating Point Operations) for FlashBEV kernels.
 

@@ -69,7 +69,8 @@ def sampling_vt_pytorch(
 
     bev_grid_shape = coords_uv.shape[1:3]
 
-    if False:
+    # Note: there was no clear difference in performance between the two approaches.
+    if True:
         features_3d = torch.nn.functional.grid_sample(
             input=features_pv,
             grid=coords_uv.flatten(1,2),

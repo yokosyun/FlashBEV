@@ -73,14 +73,6 @@ if __name__ == "__main__":
                 ],
             ),
             make_cuda_ext(
-                name="bevpoolv2_ext",
-                module="flashbevpool",
-                sources=[
-                    "src/bevpoolv2.cpp",
-                    "src/bevpoolv2_cuda.cu",
-                ],
-            ),
-            make_cuda_ext(
                 name="sampling_vt_ext",
                 module="flashbevpool",
                 sources=[

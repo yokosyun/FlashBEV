@@ -1,4 +1,5 @@
-#!/usr/bin/env python3
+# Copyright (c) Shunsuke Yokokawa. All rights reserved.
+
 """
 Benchmark script for evaluating memory peak and latency of different view transform methods.
 

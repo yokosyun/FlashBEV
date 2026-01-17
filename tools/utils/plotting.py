@@ -1,3 +1,5 @@
+# Copyright (c) Shunsuke Yokokawa. All rights reserved.
+
 from pathlib import Path
 from typing import Dict, Tuple
 

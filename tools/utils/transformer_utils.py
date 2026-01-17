@@ -1,3 +1,5 @@
+# Copyright (c) Shunsuke Yokokawa. All rights reserved.
+
 from typing import Dict, Tuple
 
 from flashbevpool import SamplingVT

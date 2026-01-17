@@ -1,3 +1,5 @@
+# Copyright (c) Shunsuke Yokokawa. All rights reserved.
+
 import time
 from typing import Dict, List
 

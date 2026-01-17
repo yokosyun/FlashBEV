@@ -219,11 +219,6 @@ class SamplingVT(BaseModule):
     def forward_depth(self, x):
         depth_params = self.depth_network(x)
         depth_params[:, 1] += 0.1
-        # depth_mu, depth_sigma = depth_params.chunk(chunks=2, dim=1)
-        # depth_sigma = depth_sigma + 0.1
-        # depth_mu = depth_mu.squeeze(1)
-        # depth_sigma = depth_sigma.squeeze(1)
-        # depth = torch.stack([depth_mu, depth_sigma], dim=-1)
         return depth_params
 
     def forward(self, input, images=None, img_meta=None, lidar_cloud=None, depth_from_lidar=None):

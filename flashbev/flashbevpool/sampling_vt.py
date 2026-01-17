@@ -67,23 +67,36 @@ def sampling_vt_pytorch(
     
     coords_uv = torch.stack([feat_u_normalized, feat_v_normalized], dim=-1)
 
-    features_3d = torch.nn.functional.grid_sample(
-        input=features_pv,
-        grid=coords_uv.flatten(1,2),
-        mode="bilinear",
-        padding_mode="border",
-        align_corners=True,
-    )
-    features_3d = features_3d.unflatten(2, coords_uv.shape[1:3])
+    bev_grid_shape = coords_uv.shape[1:3]
 
-    depths_3d = torch.nn.functional.grid_sample(
-        input=depths.movedim(-1,1),
-        grid=coords_uv.flatten(1,2),
-        mode="bilinear",
-        padding_mode="border",
-        align_corners=True,
-    )
-    depths_3d = depths_3d.unflatten(2, coords_uv.shape[1:3])
+    # Note: there was no clear difference in performance between the two approaches.
+    if True:
+        features_3d = torch.nn.functional.grid_sample(
+            input=features_pv,
+            grid=coords_uv.flatten(1,2),
+            mode="bilinear",
+            padding_mode="border",
+            align_corners=True,
+        ).unflatten(2, bev_grid_shape)
+
+        depths_3d = torch.nn.functional.grid_sample(
+            input=depths,
+            grid=coords_uv.flatten(1,2),
+            mode="bilinear",
+            padding_mode="border",
+            align_corners=True,
+        ).unflatten(2, bev_grid_shape)
+    else:
+        samples_2d = torch.cat([features_pv, depths], dim=1)
+        samples_3d = torch.nn.functional.grid_sample(
+            input=samples_2d,
+            grid=coords_uv.flatten(1,2),
+            mode="bilinear",
+            padding_mode="border",
+            align_corners=True,
+        ).unflatten(2, bev_grid_shape)
+        features_3d = samples_3d[:, :features_pv.shape[1]]
+        depths_3d = samples_3d[:, features_pv.shape[1]:]
 
     depth_mu = depths_3d[:, 0]
     depth_sigma = depths_3d[:, 1]
@@ -206,12 +219,8 @@ class SamplingVT(BaseModule):
 
     def forward_depth(self, x):
         depth_params = self.depth_network(x)
-        depth_mu, depth_sigma = depth_params.chunk(chunks=2, dim=1)
-        depth_sigma = depth_sigma + 0.1
-        depth_mu = depth_mu.squeeze(1)
-        depth_sigma = depth_sigma.squeeze(1)
-        depth = torch.stack([depth_mu, depth_sigma], dim=-1)
-        return depth
+        depth_params[:, 1] += 0.1
+        return depth_params
 
     def forward(self, input, images=None, img_meta=None, lidar_cloud=None, depth_from_lidar=None):
         x = input[0]
@@ -241,7 +250,7 @@ class SamplingVT(BaseModule):
 
             bev_feat = flash_bevpool(
                 image_feats=features_pv.movedim(-3, -1).unflatten(0, (B, N)),
-                depth_params=depths.unflatten(0, (B, N)),
+                depth_params=depths.movedim(-3, -1).unflatten(0, (B, N)),
                 projection_matrices=projection_matrices,
                 depth_distribution=depth_distribution_int,
                 use_shared_memory=self.use_shared_memory,
@@ -267,7 +276,7 @@ class SamplingVT(BaseModule):
             )
 
             if self.use_bev_pool:
-                bev_feat = self._sampling_vt_pillarpool_fused(coords_3d, image_uvd, features_pv.unflatten(0, (B, N)), depths.unflatten(0, (B, N)))
+                bev_feat = self._sampling_vt_pillarpool_fused(coords_3d, image_uvd, features_pv.unflatten(0, (B, N)), depths.movedim(-3, -1).unflatten(0, (B, N)))
                 bev_feat = bev_feat.movedim(-1, -2)
             else:
                 bev_feat = sampling_vt_pytorch(

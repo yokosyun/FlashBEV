@@ -42,3 +42,9 @@ uv run python tools/calculate_memory.py
 
 uv run python tools/plot_latency.py
 ```
+
+
+# Debuging
+```
+uv run python -m debugpy --listen 0.0.0.0:7777 --wait-for-client ${ARGS}
+```

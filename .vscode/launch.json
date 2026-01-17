@@ -1,0 +1,19 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Attach Mode (debugpy:7777)",
+            "type": "debugpy",
+            "request": "attach",
+            "connect": { "host": "localhost", "port": 7777 },
+            "justMyCode": false,
+            "subProcess": true,
+            "pathMappings": [
+            {
+                "localRoot": "${workspaceFolder}",
+                "remoteRoot": "./"
+            }
+            ]
+        },
+    ]
+}

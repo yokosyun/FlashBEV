@@ -13,6 +13,7 @@ dependencies = [
     "torch>=2.1.0,<2.5.0; python_version<'3.9'",
     "torch>=2.1.0; python_version>='3.9'",
     "numpy",
+    "debugpy",
 ]
 
 [project.optional-dependencies]

@@ -313,14 +313,10 @@ def create_plots(gpus, lat_ms, norm_lat, speedups):
     
     plt.tight_layout(rect=[0, 0, 1, 0.96])
     
-    # Save as both PDF and PNG
-    output_pdf = "height_scaling_normalized.pdf"
-    output_png = "height_scaling_normalized.png"
+    output_png = "outputs/height_scaling_normalized.png"
     
-    plt.savefig(output_pdf, format="pdf", bbox_inches="tight", dpi=300)
     plt.savefig(output_png, format="png", bbox_inches="tight", dpi=300)
     
-    print(f"Saved: {output_pdf}")
     print(f"Saved: {output_png}")
 
 def main():

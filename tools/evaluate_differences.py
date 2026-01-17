@@ -32,10 +32,14 @@ def compute_difference_metrics(
         baseline_norm = torch.norm(baseline).item()
         target_norm = torch.norm(target).item()
         
-        if baseline_norm > 1e-8:
-            relative_error = torch.norm(diff).item() / baseline_norm
-        else:
-            relative_error = float('inf') if target_norm > 1e-8 else 0.0
+        abs_baseline = torch.abs(baseline)
+        abs_diff = torch.abs(diff)
+        eps = 1e-8
+        
+        elementwise_relative_error = abs_diff / torch.clamp(abs_baseline, min=eps)
+        
+        max_relative_error = torch.max(elementwise_relative_error).item()
+        mean_relative_error = torch.mean(elementwise_relative_error).item()
         
         baseline_flat = baseline.flatten()
         target_flat = target.flatten()
@@ -55,7 +59,8 @@ def compute_difference_metrics(
             "min_abs_diff": min_diff,
             "mean_diff": mean_diff,
             "std_diff": std_diff,
-            "relative_error": relative_error,
+            "max_relative_error": max_relative_error,
+            "mean_relative_error": mean_relative_error,
             "cosine_similarity": cosine_sim,
         }
         
@@ -69,7 +74,7 @@ def compare_two_methods(
     method2_name: str = "Method 2",
     tolerance_mse: float = 1e-6,
     tolerance_mae: float = 1e-6,
-    tolerance_relative: float = 1e-5,
+    tolerance_mean_relative: float = 1e-3,
 ) -> Dict:
     """Compare two methods with focused metrics and pass/fail assessment.
     
@@ -80,7 +85,7 @@ def compare_two_methods(
         method2_name: Name of second method
         tolerance_mse: Tolerance for MSE (default: 1e-6)
         tolerance_mae: Tolerance for MAE (default: 1e-6)
-        tolerance_relative: Tolerance for relative error (default: 1e-5)
+        tolerance_mean_relative: Tolerance for mean relative error (default: 1e-3)
     
     Returns:
         Dictionary with metrics and pass/fail status
@@ -95,10 +100,10 @@ def compare_two_methods(
     
     mse_pass = metrics["mse"] < tolerance_mse
     mae_pass = metrics["mae"] < tolerance_mae
-    relative_pass = metrics["relative_error"] < tolerance_relative
+    mean_relative_pass = metrics["mean_relative_error"] < tolerance_mean_relative
     cosine_pass = metrics["cosine_similarity"] > 0.9999
     
-    overall_match = mse_pass and mae_pass and relative_pass and cosine_pass
+    overall_match = mse_pass and mae_pass and mean_relative_pass and cosine_pass
     
     comparison = {
         "method1": method1_name,
@@ -107,13 +112,13 @@ def compare_two_methods(
         "tolerances": {
             "mse": tolerance_mse,
             "mae": tolerance_mae,
-            "relative_error": tolerance_relative,
+            "mean_relative_error": tolerance_mean_relative,
             "cosine_similarity": 0.9999,
         },
         "pass_fail": {
             "mse": mse_pass,
             "mae": mae_pass,
-            "relative_error": relative_pass,
+            "mean_relative_error": mean_relative_pass,
             "cosine_similarity": cosine_pass,
         },
         "overall_match": overall_match,
@@ -144,8 +149,9 @@ def print_two_method_comparison(comparison: Dict):
          "✓ PASS" if pass_fail["mse"] else "✗ FAIL"],
         ["MAE", f"{metrics['mae']:.6e}", f"< {tolerances['mae']:.6e}", 
          "✓ PASS" if pass_fail["mae"] else "✗ FAIL"],
-        ["Relative Error", f"{metrics['relative_error']:.6e}", f"< {tolerances['relative_error']:.6e}", 
-         "✓ PASS" if pass_fail["relative_error"] else "✗ FAIL"],
+        ["Mean Relative Error", f"{metrics['mean_relative_error']:.6e}", f"< {tolerances['mean_relative_error']:.6e}", 
+         "✓ PASS" if pass_fail["mean_relative_error"] else "✗ FAIL"],
+        ["Max Relative Error", f"{metrics['max_relative_error']:.6e}", "- (info only)", "-"],
         ["Cosine Similarity", f"{metrics['cosine_similarity']:.6f}", f"> {tolerances['cosine_similarity']:.4f}", 
          "✓ PASS" if pass_fail["cosine_similarity"] else "✗ FAIL"],
         ["Max Abs Diff", f"{metrics['max_abs_diff']:.6e}", "-", "-"],
@@ -283,14 +289,14 @@ def print_results_table(results: Dict, baseline_name: str):
     
     table_data = []
     headers = ["Method", "MSE", "MAE", "Max Abs Diff", "Mean Diff", "Std Diff", 
-               "Relative Error", "Cosine Sim"]
+               "Max Rel Error", "Mean Rel Error", "Cosine Sim"]
     
     for method_name, result in results.items():
         if method_name == baseline_name:
-            table_data.append([method_name, "BASELINE", "-", "-", "-", "-", "-", "-"])
+            table_data.append([method_name, "BASELINE", "-", "-", "-", "-", "-", "-", "-"])
         elif result["metrics"] is None or "error" in result["metrics"]:
             error_msg = result["metrics"].get("error", "Unknown error") if result["metrics"] else "No metrics"
-            table_data.append([method_name, f"ERROR: {error_msg}", "-", "-", "-", "-", "-", "-"])
+            table_data.append([method_name, f"ERROR: {error_msg}", "-", "-", "-", "-", "-", "-", "-"])
         else:
             metrics = result["metrics"]
             table_data.append([
@@ -300,7 +306,8 @@ def print_results_table(results: Dict, baseline_name: str):
                 f"{metrics['max_abs_diff']:.6e}",
                 f"{metrics['mean_diff']:.6e}",
                 f"{metrics['std_diff']:.6e}",
-                f"{metrics['relative_error']:.6e}",
+                f"{metrics['max_relative_error']:.6e}",
+                f"{metrics['mean_relative_error']:.6e}",
                 f"{metrics['cosine_similarity']:.6f}",
             ])
     
@@ -410,7 +417,7 @@ def main(cfg: DictConfig):
                     method2_name,
                     tolerance_mse=cfg.get("tolerance_mse", 1e-6),
                     tolerance_mae=cfg.get("tolerance_mae", 1e-6),
-                    tolerance_relative=cfg.get("tolerance_relative", 1e-5),
+                    tolerance_mean_relative=cfg.get("tolerance_mean_relative", 1e-3),
                 )
                 print_two_method_comparison(comparison)
     
